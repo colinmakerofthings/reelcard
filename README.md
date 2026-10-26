@@ -54,8 +54,8 @@ reelcard "My Film.mp4" --title "My Film" --year 1994
 
 The command-line interface is a placeholder while the poster pipeline is being
 implemented. Run `reelcard --help` to see the current arguments. The video
-metadata and sampling components are available as package internals but are not
-connected to the CLI yet.
+metadata, frame sampling, representative-color, and plain barcode components
+are available as package internals but are not connected to the CLI yet.
 
 Planned options include the film title and year, director, subtitle, credits,
 output path, stripe count, postcard or custom output dimensions, and print DPI.
