@@ -18,12 +18,15 @@ within a carefully typeset poster.
 ## Requirements
 
 - Python 3.11 or newer.
-- FFmpeg and FFprobe available on your `PATH` (required once video processing
-  is implemented).
+- FFmpeg and FFprobe available on your `PATH`.
 
 FFmpeg and FFprobe are separate system programs; installing the Python package
-will not install them. Installation guidance for Windows, macOS, and Linux will
-be added before the first release.
+will not install them. Install FFmpeg using a trusted package manager for your
+operating system, then check that both `ffmpeg -version` and
+`ffprobe -version` work in a new terminal. For example, Windows users can use
+`winget install Gyan.FFmpeg` or `choco install ffmpeg`, macOS users can use
+`brew install ffmpeg`, and Debian/Ubuntu users can use
+`sudo apt install ffmpeg`.
 
 ## Installation
 
@@ -49,8 +52,10 @@ The intended interface is:
 reelcard "My Film.mp4" --title "My Film" --year 1994
 ```
 
-The command-line interface is a placeholder while the project foundation is
-being established. Run `reelcard --help` to see the current arguments.
+The command-line interface is a placeholder while the poster pipeline is being
+implemented. Run `reelcard --help` to see the current arguments. The video
+metadata and sampling components are available as package internals but are not
+connected to the CLI yet.
 
 Planned options include the film title and year, director, subtitle, credits,
 output path, stripe count, postcard or custom output dimensions, and print DPI.
