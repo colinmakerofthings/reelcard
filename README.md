@@ -5,8 +5,9 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Project status:** Early development. Video processing and poster generation
-> are not implemented yet.
+> **Project status:** Early development. Video sampling, barcode creation, and
+> poster rendering are implemented as package components; the CLI pipeline is
+> not connected yet.
 
 ## Planned features
 
@@ -54,8 +55,9 @@ reelcard "My Film.mp4" --title "My Film" --year 1994
 
 The command-line interface is a placeholder while the poster pipeline is being
 implemented. Run `reelcard --help` to see the current arguments. The video
-metadata, frame sampling, representative-color, and plain barcode components
-are available as package internals but are not connected to the CLI yet.
+metadata, frame sampling, representative-color, plain barcode, and postcard
+renderer components are available as package internals but are not connected
+to the CLI yet.
 
 Planned options include the film title and year, director, subtitle, credits,
 output path, stripe count, postcard or custom output dimensions, and print DPI.
@@ -64,9 +66,9 @@ The default print size is planned to be approximately 105 × 148 mm at 300 DPI
 
 ## Output
 
-The initial release is planned to export a deterministic PNG. Video metadata
-will be read locally using FFprobe, and selected frames will be decoded by
-FFmpeg. PDF and vector exports are possible future enhancements.
+The renderer exports a PNG with print-resolution metadata. Video metadata is
+read locally using FFprobe, and selected frames are decoded by FFmpeg. PDF and
+vector exports are possible future enhancements.
 
 ## Supported platforms and limitations
 
@@ -91,3 +93,5 @@ small synthetic fixtures rather than copyrighted films.
 ## Licence
 
 Reelcard is distributed under the MIT License; see [LICENSE](LICENSE).
+The bundled Cormorant Garamond font is licensed under the SIL Open Font
+License 1.1; see [the font licence](src/reelcard/fonts/OFL.txt).
