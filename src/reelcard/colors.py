@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
+from typing import Literal
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from reelcard.video import VideoFrame
 
 DEFAULT_TRIM_FRACTION = 0.1
 DEFAULT_BARCODE_HEIGHT = 64
 BRIGHT_PIXEL_FRACTION = 0.75
+ColorStyle = Literal["natural", "brighter", "vivid"]
 
 
 def representative_color(
@@ -64,10 +66,15 @@ def make_barcode(
     frames: Iterable[VideoFrame],
     *,
     height: int = DEFAULT_BARCODE_HEIGHT,
+    color_style: ColorStyle = "natural",
 ) -> Image.Image:
     """Render sampled frames as one vertical stripe each, in input order."""
     if isinstance(height, bool) or not isinstance(height, int) or height <= 0:
         raise ValueError("barcode height must be a positive integer")
+    if color_style not in ("natural", "brighter", "vivid"):
+        raise ValueError(
+            "color_style must be 'natural', 'brighter', or 'vivid'"
+        )
 
     colors: list[tuple[int, int, int]] = []
     previous_timestamp = -math.inf
@@ -88,4 +95,9 @@ def make_barcode(
         raise ValueError("at least one frame is required to make a barcode")
 
     row = bytes(channel for color in colors for channel in color)
-    return Image.frombytes("RGB", (len(colors), height), row * height)
+    barcode = Image.frombytes("RGB", (len(colors), height), row * height)
+    if color_style == "brighter":
+        barcode = ImageEnhance.Brightness(barcode).enhance(1.15)
+    elif color_style == "vivid":
+        barcode = ImageEnhance.Color(barcode).enhance(1.25)
+    return barcode

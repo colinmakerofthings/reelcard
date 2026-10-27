@@ -33,6 +33,7 @@ def test_cli_help_lists_supported_options(capsys: pytest.CaptureFixture[str]) ->
         "--output",
         "--format",
         "--stripes",
+        "--color-style",
         "--size",
         "--width",
         "--height",
@@ -165,6 +166,8 @@ def test_cli_runs_pipeline_with_metadata_and_custom_options(
                 str(output_path),
                 "--stripes",
                 "3",
+                "--color-style",
+                "vivid",
                 "--width",
                 "874",
                 "--height",
@@ -179,6 +182,7 @@ def test_cli_runs_pipeline_with_metadata_and_custom_options(
     probe.assert_called_once_with(input_path)
     frames.assert_called_once_with(input_path, 3, metadata=metadata)
     make_barcode.assert_called_once()
+    assert make_barcode.call_args.kwargs["color_style"] == "vivid"
     render.assert_called_once_with(
         barcode,
         title="Film Title",
@@ -210,12 +214,13 @@ def test_cli_default_output_uses_sanitized_title_and_preset_size(
     with (
         patch("reelcard.cli.probe_video", return_value=metadata),
         patch("reelcard.cli.iter_video_frames", return_value=iter(())),
-        patch("reelcard.cli.make_barcode", return_value=Image.new("RGB", (1, 64))),
+        patch("reelcard.cli.make_barcode", return_value=Image.new("RGB", (1, 64))) as make_barcode,
         patch("reelcard.cli.render_poster") as render,
         patch("reelcard.cli.save_poster") as save,
     ):
         assert main([str(input_path)]) == 0
 
+    assert make_barcode.call_args.kwargs["color_style"] == "natural"
     render.assert_called_once()
     assert render.call_args.kwargs["width"] == DEFAULT_WIDTH
     assert render.call_args.kwargs["height"] == DEFAULT_HEIGHT

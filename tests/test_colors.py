@@ -140,3 +140,23 @@ def test_make_barcode_does_not_apply_gamma_to_uniform_color() -> None:
     frame = _frame((32, 96, 200))
 
     assert make_barcode([frame]).getpixel((0, 0)) == (32, 96, 200)
+
+
+def test_make_barcode_brighter_style_lifts_channels_moderately() -> None:
+    barcode = make_barcode([_frame((80, 120, 160))], color_style="brighter")
+
+    assert barcode.getpixel((0, 0)) == (92, 138, 184)
+
+
+def test_make_barcode_vivid_style_increases_saturation() -> None:
+    original = make_barcode([_frame((160, 100, 80))])
+    vivid = make_barcode([_frame((160, 100, 80))], color_style="vivid")
+    original_range = max(original.getpixel((0, 0))) - min(original.getpixel((0, 0)))
+    vivid_range = max(vivid.getpixel((0, 0))) - min(vivid.getpixel((0, 0)))
+
+    assert vivid_range > original_range
+
+
+def test_make_barcode_rejects_unknown_color_style() -> None:
+    with pytest.raises(ValueError, match="color_style"):
+        make_barcode([_frame((1, 2, 3))], color_style="unknown")

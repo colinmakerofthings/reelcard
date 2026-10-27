@@ -7,7 +7,7 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Release:** 0.1.0 early release preview. The core workflow is usable, but
+> **Release:** 0.1.2 early release preview. The core workflow is usable, but
 > features and command-line options may change as the project develops.
 
 ## Example output
@@ -56,6 +56,8 @@ reelcard "My Film.mp4"
 reelcard "My Film.mp4" --title "My Film" --year 1994 --stripes 600
 reelcard "My Film.mp4" --output "my-film-postcard.png" --director "A. Director"
 reelcard "My Film.mp4" --format svg
+reelcard "My Film.mp4" --color-style brighter --force
+reelcard "My Film.mp4" --color-style vivid --force
 ```
 
 The input filename supplies the title when `--title` is omitted. By default,
@@ -77,6 +79,7 @@ Run `reelcard --help` for all options:
 | `--output PATH` | Output destination; extension must match the selected format. |
 | `--format FORMAT` | Output format: `png` (default) or `svg`. |
 | `--stripes N` | Number of sampled frames/stripes (default 300; maximum 10000). |
+| `--color-style STYLE` | Barcode colors: `natural` (default), `brighter`, or `vivid`. |
 | `--size postcard` | Named print-size preset (the default). |
 | `--width PX --height PX` | Custom landscape output dimensions; specify both. |
 | `--dpi DPI` | Print-resolution metadata (default 300). |
@@ -87,6 +90,11 @@ pixels). FFmpeg and FFprobe process the video locally; Reelcard does not use an
 online movie database or require network access. Barcode colors are calculated
 from the brighter 75% of each sampled frame, reducing shadow bias without an
 artificial brightness lift.
+
+Use `--color-style brighter` for a moderate brightness lift or `--color-style
+vivid` to increase color saturation. The default `natural` style keeps the
+original sampled colors. Use `--force` to replace the same output while
+comparing styles.
 
 ## Output
 

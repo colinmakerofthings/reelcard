@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"number of sampled frames/stripes (1-{MAX_STRIPES}; default: 300)",
     )
     parser.add_argument(
+        "--color-style",
+        choices=("natural", "brighter", "vivid"),
+        default="natural",
+        help="barcode color treatment (default: natural)",
+    )
+    parser.add_argument(
         "--size",
         choices=("postcard",),
         default="postcard",
@@ -102,7 +108,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         metadata = probe_video(input_path)
         print(f"Sampling {args.stripes} frames...", file=sys.stderr)
         barcode = make_barcode(
-            iter_video_frames(input_path, args.stripes, metadata=metadata)
+            iter_video_frames(input_path, args.stripes, metadata=metadata),
+            color_style=args.color_style,
         )
         render_options = {
             "title": title,
