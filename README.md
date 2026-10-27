@@ -1,5 +1,7 @@
 # Reelcard
 
+[![Tests](https://github.com/colinmakerofthings/reelcard/actions/workflows/tests.yml/badge.svg)](https://github.com/colinmakerofthings/reelcard/actions/workflows/tests.yml)
+
 Reelcard is a local command-line tool for turning a video into a postcard-sized
 film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
