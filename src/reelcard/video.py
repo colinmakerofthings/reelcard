@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import subprocess
+import tempfile
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -164,11 +165,7 @@ def iter_video_frames(
     probe_timeout: float = DEFAULT_PROBE_TIMEOUT,
     frame_timeout: float = DEFAULT_FRAME_TIMEOUT,
 ) -> Iterator[VideoFrame]:
-    """Yield fixed-size RGB thumbnails sampled at interval midpoints.
-
-    Frames are sought and decoded one at a time. Only a thumbnail's raw RGB
-    bytes are retained by the iterator at any moment.
-    """
+    """Yield fixed-size RGB thumbnails sampled at interval midpoints."""
     _validate_stripe_count(count)
     if (
         isinstance(thumbnail_size, bool)
@@ -183,39 +180,42 @@ def iter_video_frames(
     video = metadata or probe_video(path, ffprobe=ffprobe, timeout=probe_timeout)
     timestamps = sample_timestamps(video.duration, count)
     expected_bytes = thumbnail_size * thumbnail_size * 3
-    video_filter = f"scale={thumbnail_size}:{thumbnail_size}"
-
-    for index, timestamp in enumerate(timestamps, start=1):
-        command = [
-            ffmpeg,
-            "-nostdin",
-            "-v",
-            "error",
-            "-ss",
-            f"{timestamp:.6f}",
-            "-i",
-            str(path),
-            "-map",
-            f"0:{video.stream_index}",
-            "-an",
-            "-sn",
-            "-dn",
-            "-frames:v",
-            "1",
-            "-vf",
-            video_filter,
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "rgb24",
-            "pipe:1",
-        ]
+    fps = count / video.duration
+    start_time = timestamps[0]
+    command = [
+        ffmpeg,
+        "-nostdin",
+        "-v",
+        "error",
+        "-i",
+        str(path),
+        "-map",
+        f"0:{video.stream_index}",
+        "-an",
+        "-sn",
+        "-dn",
+        "-vf",
+        (
+            f"setpts=PTS-{start_time:.9f}/TB,"
+            f"fps=fps={fps:.12f}:start_time=0:round=near:eof_action=pass,"
+            f"scale={thumbnail_size}:{thumbnail_size}"
+        ),
+        "-frames:v",
+        str(count),
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "pipe:1",
+    ]
+    with tempfile.TemporaryFile() as output:
         try:
-            result = subprocess.run(
+            subprocess.run(
                 command,
                 check=True,
-                capture_output=True,
-                timeout=frame_timeout,
+                stdout=output,
+                stderr=subprocess.PIPE,
+                timeout=frame_timeout * count,
             )
         except FileNotFoundError as exc:
             raise VideoToolError(
@@ -224,28 +224,35 @@ def iter_video_frames(
             ) from exc
         except subprocess.TimeoutExpired as exc:
             raise FrameExtractionError(
-                f"FFmpeg timed out extracting sample {index}/{count} "
-                f"at {timestamp:.3f}s from {path}."
+                f"FFmpeg timed out extracting {count} samples from {path}."
             ) from exc
         except subprocess.CalledProcessError as exc:
             detail = _stderr_detail(exc.stderr)
             raise FrameExtractionError(
-                f"FFmpeg could not extract sample {index}/{count} at "
-                f"{timestamp:.3f}s from {path}"
+                f"FFmpeg could not extract {count} samples from {path}"
                 + (f": {detail}" if detail else ".")
             ) from exc
 
-        if len(result.stdout) != expected_bytes:
+        output.seek(0, 2)
+        output_size = output.tell()
+        frame_count, remainder = divmod(output_size, expected_bytes)
+        if remainder or frame_count != count:
+            index = min(frame_count + 1, count)
+            timestamp = timestamps[index - 1]
             raise FrameExtractionError(
-                f"FFmpeg returned {len(result.stdout)} bytes for sample "
-                f"{index}/{count}; expected {expected_bytes}."
+                f"FFmpeg returned {output_size} bytes while extracting "
+                f"sample {index}/{count} at {timestamp:.3f}s; expected "
+                f"{expected_bytes} bytes per frame and {count} frames."
             )
-        yield VideoFrame(
-            timestamp=timestamp,
-            width=thumbnail_size,
-            height=thumbnail_size,
-            rgb=result.stdout,
-        )
+
+        output.seek(0)
+        for timestamp in timestamps:
+            yield VideoFrame(
+                timestamp=timestamp,
+                width=thumbnail_size,
+                height=thumbnail_size,
+                rgb=output.read(expected_bytes),
+            )
 
 
 def _validate_stripe_count(count: int) -> None:

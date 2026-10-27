@@ -178,12 +178,21 @@ def test_iter_video_frames_extracts_only_small_rgb_thumbnails(
 ) -> None:
     video_path = tmp_path / "movie.mkv"
     video_path.touch()
-    output = bytes(range(12))
+    output = bytes(range(24))
     metadata = VideoMetadata(8.0, 1920, 1080, 2)
+
+    def run_ffmpeg(
+        command: list[str],
+        *,
+        stdout: Any,
+        **kwargs: Any,
+    ) -> subprocess.CompletedProcess:
+        stdout.write(output)
+        return subprocess.CompletedProcess(command, 0)
 
     with patch(
         "reelcard.video.subprocess.run",
-        return_value=subprocess.CompletedProcess([], 0, output, b""),
+        side_effect=run_ffmpeg,
     ) as run:
         frames = list(
             iter_video_frames(
@@ -195,12 +204,19 @@ def test_iter_video_frames_extracts_only_small_rgb_thumbnails(
         )
 
     assert [frame.timestamp for frame in frames] == [2.0, 6.0]
-    assert all(frame.rgb == output for frame in frames)
+    assert [frame.rgb for frame in frames] == [output[:12], output[12:]]
     assert all((frame.width, frame.height) == (2, 2) for frame in frames)
-    assert run.call_count == 2
+    assert run.call_count == 1
     command = run.call_args_list[0].args[0]
     assert command[command.index("-map") + 1] == "0:2"
+    assert command[command.index("-frames:v") + 1] == "2"
+    assert (
+        "setpts=PTS-2.000000000/TB,"
+        "fps=fps=0.250000000000:start_time=0:round=near:eof_action=pass,"
+        "scale=2:2"
+    ) in command
     assert command[-1] == "pipe:1"
+    assert run.call_args.kwargs["timeout"] == 120.0
 
 
 def test_iter_video_frames_fails_if_ffmpeg_returns_no_frame(
@@ -230,7 +246,7 @@ def test_iter_video_frames_reports_decode_error_with_sample_context(
 
     with (
         patch("reelcard.video.subprocess.run", side_effect=failure),
-        pytest.raises(FrameExtractionError, match="sample 1/1 at 4.000s.*decode failed"),
+        pytest.raises(FrameExtractionError, match="could not extract 1 samples.*decode failed"),
     ):
         next(iter_video_frames(video_path, 1, metadata=metadata))
 
