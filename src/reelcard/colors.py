@@ -12,6 +12,7 @@ from reelcard.video import VideoFrame
 
 DEFAULT_TRIM_FRACTION = 0.1
 DEFAULT_BARCODE_HEIGHT = 64
+BRIGHT_PIXEL_FRACTION = 0.75
 
 
 def representative_color(
@@ -19,11 +20,11 @@ def representative_color(
     *,
     trim_fraction: float = DEFAULT_TRIM_FRACTION,
 ) -> tuple[int, int, int]:
-    """Calculate a trimmed-mean sRGB color from a sampled frame.
+    """Calculate a robust color from the brighter three-quarters of a frame.
 
-    Each channel is averaged independently after removing the lowest and
-    highest ``trim_fraction`` of pixel values. This reduces the influence of
-    isolated highlights or dark pixels while remaining deterministic.
+    Keeping darker pixels out of the color estimate reduces shadow bias. A
+    trimmed channel mean over the retained pixels limits the effect of
+    highlights and isolated color noise.
     """
     if not isinstance(frame, VideoFrame):
         raise TypeError("frame must be a VideoFrame")
@@ -47,9 +48,13 @@ def representative_color(
         raise ValueError("trim_fraction must be finite and in the range [0, 0.5)")
 
     pixels = np.frombuffer(frame.rgb, dtype=np.uint8).reshape(-1, 3)
-    trim_count = int(len(pixels) * trim_fraction)
-    sorted_channels = np.sort(pixels, axis=0)
-    retained = sorted_channels[trim_count : len(pixels) - trim_count or None]
+    keep_count = max(1, math.ceil(len(pixels) * BRIGHT_PIXEL_FRACTION))
+    brightness = pixels.max(axis=1)
+    brightest_indices = np.argsort(brightness, kind="stable")[-keep_count:]
+    members = pixels[brightest_indices]
+    trim_count = int(len(members) * trim_fraction)
+    sorted_channels = np.sort(members, axis=0)
+    retained = sorted_channels[trim_count : len(members) - trim_count or None]
     means = retained.mean(axis=0, dtype=np.float64)
     rounded = np.floor(means + 0.5).astype(np.uint8)
     return int(rounded[0]), int(rounded[1]), int(rounded[2])

@@ -126,3 +126,17 @@ def test_make_barcode_is_deterministic() -> None:
 
     assert isinstance(first, Image.Image)
     assert first.tobytes() == second.tobytes()
+
+
+def test_representative_color_keeps_bright_saturated_colors_over_shadows() -> None:
+    pixels = [(0, 0, 0)] * 25 + [(210, 70, 25)] * 75
+
+    color = representative_color(_frame((0, 0, 0), pixels=pixels))
+
+    assert color == (210, 70, 25)
+
+
+def test_make_barcode_does_not_apply_gamma_to_uniform_color() -> None:
+    frame = _frame((32, 96, 200))
+
+    assert make_barcode([frame]).getpixel((0, 0)) == (32, 96, 200)

@@ -29,20 +29,27 @@ def test_render_poster_has_default_postcard_dimensions_and_paper_background() ->
     )
 
     assert poster.size == (DEFAULT_WIDTH, DEFAULT_HEIGHT)
+    assert DEFAULT_WIDTH > DEFAULT_HEIGHT
     assert poster.mode == "RGB"
     assert poster.getpixel((0, 0)) == PAPER
+    assert poster.getpixel((round(DEFAULT_WIDTH * 0.035), round(DEFAULT_HEIGHT * 0.065))) == PAPER
 
 
-def test_render_poster_scales_to_custom_portrait_dimensions() -> None:
+def test_render_poster_scales_to_custom_landscape_dimensions() -> None:
     poster = render_poster(
         _barcode(),
         title="My Film",
         runtime_seconds=5_520,
-        width=620,
-        height=874,
+        width=874,
+        height=620,
     )
 
-    assert poster.size == (620, 874)
+    assert poster.size == (874, 620)
+
+
+def test_default_postcard_dimensions_are_landscape() -> None:
+    assert DEFAULT_WIDTH == 1748
+    assert DEFAULT_HEIGHT == 1240
 
 
 def test_render_poster_draws_barcode_and_optional_metadata() -> None:
@@ -58,12 +65,34 @@ def test_render_poster_draws_barcode_and_optional_metadata() -> None:
         subtitle="A thoughtful subtitle",
         credits="Written by Someone",
     )
-    left = poster.getpixel((124, round(DEFAULT_HEIGHT * 0.5)))
-    right = poster.getpixel((1115, round(DEFAULT_HEIGHT * 0.5)))
+    left = poster.getpixel((round(DEFAULT_WIDTH * 0.10), round(DEFAULT_HEIGHT * 0.5)))
+    right = poster.getpixel(
+        (round(DEFAULT_WIDTH * 0.90) - 1, round(DEFAULT_HEIGHT * 0.5))
+    )
 
     assert left == (250, 10, 20)
     assert right == (10, 30, 240)
     assert len(set(poster.getdata())) > 4
+
+
+def test_render_poster_fills_missing_metadata_with_clear_placeholders() -> None:
+    poster = render_poster(
+        _barcode(),
+        title="Film",
+        runtime_seconds=60,
+    )
+    metadata_y = round(DEFAULT_HEIGHT * 0.135)
+    column_width = round(DEFAULT_WIDTH * 0.91 / 4)
+    for index in range(4):
+        region = poster.crop(
+            (
+                round(DEFAULT_WIDTH * 0.045) + index * column_width,
+                metadata_y,
+                round(DEFAULT_WIDTH * 0.045) + (index + 1) * column_width,
+                metadata_y + 55,
+            )
+        )
+        assert len(set(region.getdata())) > 1
 
 
 def test_render_poster_wraps_long_titles_and_normalizes_whitespace() -> None:
@@ -83,7 +112,7 @@ def test_render_poster_wraps_long_titles_and_normalizes_whitespace() -> None:
         ({"title": " "}, "title"),
         ({"runtime_seconds": 0}, "runtime_seconds"),
         ({"year": 0}, "year"),
-        ({"width": 900, "height": 800}, "portrait"),
+        ({"width": 800, "height": 900}, "landscape"),
         ({"width": 200, "height": 300}, "dimensions"),
         ({"dpi": 0}, "dpi"),
         ({"dpi": float("nan")}, "dpi"),
@@ -117,15 +146,15 @@ def test_save_poster_writes_png_dimensions_and_dpi_metadata(tmp_path: Path) -> N
         _barcode(),
         title="Film",
         runtime_seconds=60,
-        width=620,
-        height=874,
+        width=874,
+        height=620,
     )
 
     save_poster(poster, path, dpi=DEFAULT_DPI)
 
     with Image.open(path) as saved:
         assert saved.format == "PNG"
-        assert saved.size == (620, 874)
+        assert saved.size == (874, 620)
         assert saved.info["dpi"] == pytest.approx((300, 300), abs=0.1)
 
 

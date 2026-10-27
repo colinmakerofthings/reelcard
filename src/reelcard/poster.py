@@ -7,14 +7,13 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-DEFAULT_WIDTH = 1240
-DEFAULT_HEIGHT = 1748
+DEFAULT_WIDTH = 1748
+DEFAULT_HEIGHT = 1240
 DEFAULT_DPI = 300
-PAPER = (247, 244, 236)
-INK = (40, 36, 32)
-MUTED_INK = (105, 96, 84)
-BORDER = (183, 172, 154)
-_FONT_PATH = Path(__file__).parent / "fonts" / "CormorantGaramond.ttf"
+PAPER = (243, 242, 236)
+INK = (22, 23, 22)
+PLACEHOLDER = "NOT PROVIDED"
+_FONT_PATH = Path(__file__).parent / "fonts" / "Montserrat.ttf"
 
 
 def render_poster(
@@ -24,13 +23,16 @@ def render_poster(
     runtime_seconds: float,
     year: int | None = None,
     director: str | None = None,
+    writer: str | None = None,
+    starring: str | None = None,
+    music: str | None = None,
     subtitle: str | None = None,
     credits: str | None = None,
     width: int = DEFAULT_WIDTH,
     height: int = DEFAULT_HEIGHT,
     dpi: float = DEFAULT_DPI,
 ) -> Image.Image:
-    """Render a portrait postcard poster from a plain color barcode."""
+    """Render a minimal landscape postcard poster from a color barcode."""
     _validate_dimensions(width, height)
     _validate_dpi(dpi)
     if not isinstance(barcode, Image.Image) or barcode.width <= 0 or barcode.height <= 0:
@@ -45,54 +47,113 @@ def render_poster(
         raise ValueError("year must be an integer between 1 and 9999")
     runtime_label = _format_runtime(runtime_seconds)
     title_text = _normalize_text(title)
-    director_text = _normalize_optional_text(director)
+    director_text = _normalize_optional_text(director) or PLACEHOLDER
+    writer_text = _normalize_optional_text(writer) or PLACEHOLDER
+    starring_text = _normalize_optional_text(starring) or PLACEHOLDER
+    music_text = _normalize_optional_text(music) or PLACEHOLDER
     subtitle_text = _normalize_optional_text(subtitle)
     credits_text = _normalize_optional_text(credits)
 
     poster = Image.new("RGB", (width, height), PAPER)
     draw = ImageDraw.Draw(poster)
-    scale = min(width / DEFAULT_WIDTH, height / DEFAULT_HEIGHT)
-    _draw_border(draw, width, height, scale)
-
-    content_left = round(width * 0.10)
-    content_right = round(width * 0.90)
+    content_left = round(width * 0.045)
+    content_right = round(width * 0.955)
     content_width = content_right - content_left
-    center_x = width // 2
 
-    title_font, title_lines = _fit_wrapped_text(
-        title_text,
-        max_width=round(content_width * 0.98),
-        max_lines=2,
-        initial_size=max(10, round(width * 0.074)),
-        minimum_size=max(9, round(width * 0.038)),
-        weight=500,
-    )
+    title_max_width = round(content_width * 0.75)
+    title_initial_size = max(10, round(width * 0.040))
+    title_minimum_size = max(9, round(width * 0.025))
+    try:
+        title_font = _fit_single_line(
+            title_text.upper(),
+            max_width=title_max_width,
+            initial_size=title_initial_size,
+            minimum_size=title_minimum_size,
+            weight=700,
+        )
+        title_lines = [title_text.upper()]
+    except ValueError:
+        title_font, title_lines = _fit_wrapped_text(
+            title_text.upper(),
+            max_width=title_max_width,
+            max_lines=2,
+            initial_size=title_initial_size,
+            minimum_size=title_minimum_size,
+            weight=700,
+        )
     title_line_height = _line_height(title_font)
-    title_top = round(height * 0.075)
+    title_top = round(height * 0.055)
     for index, line in enumerate(title_lines):
         draw.text(
-            (center_x, title_top + index * title_line_height),
+            (content_left, title_top + index * title_line_height),
             line,
             fill=INK,
             font=title_font,
-            anchor="mt",
+            anchor="lt",
         )
 
-    if year is not None:
-        year_font = _font(max(10, round(width * 0.027)), weight=400)
+    year_text = str(year) if year is not None else "YEAR N/A"
+    year_font = _fit_single_line(
+        year_text,
+        max_width=round(content_width * 0.25),
+        initial_size=max(10, round(width * 0.040)),
+        minimum_size=max(9, round(width * 0.022)),
+        weight=700,
+    )
+    draw.text(
+        (content_right, title_top),
+        year_text,
+        fill=INK,
+        font=year_font,
+        anchor="rt",
+    )
+
+    metadata_fields = (
+        ("DIRECTED BY", director_text),
+        ("WRITTEN BY", writer_text),
+        ("STARRING", starring_text),
+        ("MUSIC BY", music_text),
+    )
+    column_width = content_width / len(metadata_fields)
+    metadata_top = round(height * 0.135)
+    label_font = _font(max(9, round(width * 0.010)), weight=700)
+    value_font = _font(max(9, round(width * 0.010)), weight=400)
+    for index, (label, value) in enumerate(metadata_fields):
+        column_x = round(content_left + index * column_width)
         draw.text(
-            (center_x, round(height * 0.226)),
-            str(year),
-            fill=MUTED_INK,
-            font=year_font,
-            anchor="mt",
+            (column_x, metadata_top),
+            label,
+            fill=INK,
+            font=label_font,
+            anchor="lt",
         )
+        body_font, lines = _fit_wrapped_text(
+            value,
+            max_width=round(column_width * 0.92),
+            max_lines=4,
+            initial_size=value_font.size,
+            minimum_size=max(8, round(width * 0.008)),
+            weight=400,
+        )
+        for line_index, line in enumerate(lines):
+            draw.text(
+                (
+                    column_x,
+                    metadata_top
+                    + round(height * 0.018)
+                    + line_index * _line_height(body_font),
+                ),
+                line,
+                fill=INK,
+                font=body_font,
+                anchor="lt",
+            )
 
     barcode_box = (
         content_left,
-        round(height * 0.292),
+        round(height * 0.225),
         content_right,
-        round(height * 0.753),
+        round(height * 0.895),
     )
     resized_barcode = barcode.convert("RGB").resize(
         (barcode_box[2] - barcode_box[0], barcode_box[3] - barcode_box[1]),
@@ -100,74 +161,44 @@ def render_poster(
     )
     poster.paste(resized_barcode, barcode_box[:2])
 
+    footer_y = round(height * 0.91)
+    if credits_text is not None:
+        credits_font = _fit_single_line(
+            credits_text,
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
+            weight=400,
+        )
+        draw.text(
+            (content_left, footer_y),
+            credits_text.upper(),
+            fill=INK,
+            font=credits_font,
+            anchor="lt",
+        )
+
     if subtitle_text is not None:
         subtitle_font = _fit_single_line(
             subtitle_text,
-            max_width=content_width,
-            initial_size=max(10, round(width * 0.031)),
-            minimum_size=max(9, round(width * 0.018)),
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
             weight=400,
         )
         draw.text(
-            (center_x, round(height * 0.777)),
+            (content_left, footer_y + round(height * 0.021)),
             subtitle_text,
             fill=INK,
             font=subtitle_font,
-            anchor="mt",
+            anchor="lt",
         )
-
-    if director_text is not None:
-        director_label = f"DIRECTED BY {director_text}"
-        director_font = _fit_single_line(
-            director_label,
-            max_width=content_width,
-            initial_size=max(9, round(width * 0.020)),
-            minimum_size=max(8, round(width * 0.014)),
-            weight=400,
-        )
-        draw.text(
-            (center_x, round(height * 0.827)),
-            director_label,
-            fill=MUTED_INK,
-            font=director_font,
-            anchor="mt",
-        )
-
-    footer_y = round(height * 0.902)
-    draw.line(
-        (
-            content_left,
-            round(height * 0.872),
-            content_right,
-            round(height * 0.872),
-        ),
-        fill=BORDER,
-        width=max(1, round(scale)),
-    )
-    if credits_text is not None:
-        credits_font, credit_lines = _fit_wrapped_text(
-            credits_text,
-            max_width=round(content_width * 0.60),
-            max_lines=2,
-            initial_size=max(9, round(width * 0.020)),
-            minimum_size=max(8, round(width * 0.013)),
-            weight=400,
-        )
-        credit_line_height = _line_height(credits_font)
-        for index, line in enumerate(credit_lines):
-            draw.text(
-                (content_left, footer_y + index * credit_line_height),
-                line,
-                fill=MUTED_INK,
-                font=credits_font,
-                anchor="lt",
-            )
 
     runtime_font = _fit_single_line(
         runtime_label,
-        max_width=round(content_width * 0.35),
-        initial_size=max(10, round(width * 0.026)),
-        minimum_size=max(9, round(width * 0.018)),
+        max_width=round(content_width * 0.28),
+        initial_size=max(9, round(width * 0.018)),
+        minimum_size=max(8, round(width * 0.012)),
         weight=500,
     )
     draw.text(
@@ -215,8 +246,8 @@ def _validate_dimensions(width: int, height: int) -> None:
         raise ValueError(
             "poster dimensions must be integers between 300x400 and 10000x20000"
         )
-    if width >= height:
-        raise ValueError("poster dimensions must be portrait (width less than height)")
+    if width <= height:
+        raise ValueError("poster dimensions must be landscape (width greater than height)")
 
 
 def _validate_dpi(dpi: float) -> None:
@@ -319,18 +350,3 @@ def _wrap_text(
 def _line_height(font: ImageFont.FreeTypeFont) -> int:
     bounds = font.getbbox("Ag")
     return max(1, bounds[3] - bounds[1] + round(font.size * 0.1))
-
-
-def _draw_border(
-    draw: ImageDraw.ImageDraw,
-    width: int,
-    height: int,
-    scale: float,
-) -> None:
-    inset_x = round(width * 0.035)
-    inset_y = round(height * 0.025)
-    draw.rectangle(
-        (inset_x, inset_y, width - inset_x - 1, height - inset_y - 1),
-        outline=BORDER,
-        width=max(1, round(1.4 * scale)),
-    )

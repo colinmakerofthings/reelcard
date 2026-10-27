@@ -281,3 +281,41 @@ def test_probe_and_extract_from_synthetic_video(tmp_path: Path) -> None:
     assert len(frames) == 2
     assert [frame.timestamp for frame in frames] == [0.5, 1.5]
     assert all(len(frame.rgb) == 64 * 64 * 3 for frame in frames)
+
+
+@pytest.mark.skipif(
+    not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
+    reason="FFmpeg and FFprobe are required for the integration test",
+)
+def test_frame_sampling_does_not_add_black_bars_to_wide_video(
+    tmp_path: Path,
+) -> None:
+    from reelcard.colors import representative_color
+
+    video_path = tmp_path / "wide-red.mkv"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=red:s=96x64:r=2:d=2",
+            "-c:v",
+            "ffv1",
+            str(video_path),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    metadata = probe_video(video_path)
+    frame = next(iter_video_frames(video_path, 1, metadata=metadata))
+
+    color = representative_color(frame)
+    assert color[0] > 245
+    assert color[1] < 5
+    assert color[2] < 5

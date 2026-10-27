@@ -5,14 +5,13 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Project status:** Early development. Video sampling, barcode creation, and
-> poster rendering are implemented as package components; the CLI pipeline is
-> not connected yet.
+> **Project status:** Early development. The command-line pipeline generates
+> postcard PNGs from local videos.
 
 ## Planned features
 
 - A chronological colour barcode generated from a local video.
-- A portrait postcard design with title, optional year and credits, and runtime.
+- A landscape postcard design with title, optional year and credits, and runtime.
 - PNG output sized for printing at 300 DPI.
 - No accounts, hosted backend, telemetry, or network access during normal use.
 
@@ -50,24 +49,44 @@ python -m pip install -e ".[dev]"
 The intended interface is:
 
 ```console
-reelcard "My Film.mp4" --title "My Film" --year 1994
+reelcard "My Film.mp4"
+reelcard "My Film.mp4" --title "My Film" --year 1994 --stripes 600
+reelcard "My Film.mp4" --output "my-film-postcard.png" --director "A. Director"
 ```
 
-The command-line interface is a placeholder while the poster pipeline is being
-implemented. Run `reelcard --help` to see the current arguments. The video
-metadata, frame sampling, representative-color, plain barcode, and postcard
-renderer components are available as package internals but are not connected
-to the CLI yet.
+The input filename supplies the title when `--title` is omitted. By default,
+Reelcard writes a sanitized title-based PNG into the current directory and
+refuses to replace an existing file. Use `--force` to replace it.
 
-Planned options include the film title and year, director, subtitle, credits,
-output path, stripe count, postcard or custom output dimensions, and print DPI.
-The default print size is planned to be approximately 105 × 148 mm at 300 DPI
-(about 1240 × 1748 pixels).
+Run `reelcard --help` for all options:
+
+| Option | Description |
+| --- | --- |
+| `--title TEXT` | Poster title; defaults to the video filename. |
+| `--year YEAR` | Optional release year from 1 to 9999. |
+| `--director TEXT` | Optional director credit. |
+| `--writer TEXT` | Optional writer credit. |
+| `--starring TEXT` | Optional lead cast. |
+| `--music TEXT` | Optional music credit. |
+| `--subtitle TEXT` | Optional subtitle below the barcode. |
+| `--credits TEXT` | Optional footer credits. |
+| `--output PATH` | PNG destination; parent directory must already exist. |
+| `--stripes N` | Number of sampled frames/stripes (default 300; maximum 10000). |
+| `--size postcard` | Named print-size preset (the default). |
+| `--width PX --height PX` | Custom landscape output dimensions; specify both. |
+| `--dpi DPI` | Print-resolution metadata (default 300). |
+| `--force` | Allow replacing an existing output file. |
+
+The postcard preset is approximately 148 × 105 mm at 300 DPI (1748 × 1240
+pixels). FFmpeg and FFprobe process the video locally; Reelcard does not use an
+online movie database or require network access. Barcode colors are calculated
+from the brighter 75% of each sampled frame, reducing shadow bias without an
+artificial brightness lift.
 
 ## Output
 
-The renderer exports a PNG with print-resolution metadata. Video metadata is
-read locally using FFprobe, and selected frames are decoded by FFmpeg. PDF and
+Reelcard exports a PNG with print-resolution metadata. Video metadata is read
+locally using FFprobe, and selected frames are decoded by FFmpeg. PDF and
 vector exports are possible future enhancements.
 
 ## Supported platforms and limitations
@@ -93,5 +112,5 @@ small synthetic fixtures rather than copyrighted films.
 ## Licence
 
 Reelcard is distributed under the MIT License; see [LICENSE](LICENSE).
-The bundled Cormorant Garamond font is licensed under the SIL Open Font
-License 1.1; see [the font licence](src/reelcard/fonts/OFL.txt).
+The bundled Montserrat font is licensed under the SIL Open Font License 1.1;
+see [the font licence](src/reelcard/fonts/Montserrat-OFL.txt).

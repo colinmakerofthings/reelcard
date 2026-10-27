@@ -183,11 +183,7 @@ def iter_video_frames(
     video = metadata or probe_video(path, ffprobe=ffprobe, timeout=probe_timeout)
     timestamps = sample_timestamps(video.duration, count)
     expected_bytes = thumbnail_size * thumbnail_size * 3
-    video_filter = (
-        f"scale={thumbnail_size}:{thumbnail_size}:"
-        "force_original_aspect_ratio=decrease,"
-        f"pad={thumbnail_size}:{thumbnail_size}:(ow-iw)/2:(oh-ih)/2:color=black"
-    )
+    video_filter = f"scale={thumbnail_size}:{thumbnail_size}"
 
     for index, timestamp in enumerate(timestamps, start=1):
         command = [
