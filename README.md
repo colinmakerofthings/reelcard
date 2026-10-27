@@ -7,6 +7,9 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
+> **Release:** 0.1.0 early release preview. The core workflow is usable, but
+> features and command-line options may change as the project develops.
+
 ## Example output
 
 ![Example Reelcard poster for The Empire Strikes Back (1980)](assets/example-empire-strikes-back.png)
@@ -29,10 +32,11 @@ operating system, then check that both `ffmpeg -version` and
 
 ## Installation
 
-The package is not published yet. For development, clone the repository and
-install it into a virtual environment:
+Reelcard is not yet published on PyPI. Install the 0.1.0 preview from source:
 
 ```console
+git clone https://github.com/colinmakerofthings/reelcard.git
+cd reelcard
 python -m venv .venv
 ```
 
@@ -40,12 +44,12 @@ Activate the environment, then run:
 
 ```console
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install .
 ```
 
 ## Usage
 
-The intended interface is:
+Examples:
 
 ```console
 reelcard "My Film.mp4"
@@ -84,24 +88,30 @@ artificial brightness lift.
 
 ## Output
 
-Reelcard exports a PNG with print-resolution metadata. Video metadata is read
-locally using FFprobe, and selected frames are decoded by FFmpeg. PDF and
-vector exports are possible future enhancements.
+Reelcard currently exports PNG images with print-resolution metadata. Video
+metadata is read locally using FFprobe, and selected frames are decoded by
+FFmpeg. SVG and other output formats are not supported yet.
 
 ## Supported platforms and limitations
 
-Windows, macOS, and Linux are the intended platforms. FFmpeg and FFprobe must
-be installed separately. Exact codec support depends on the FFmpeg build and
-the input video. Platform support and known limitations will be documented as
-implementation and testing progress.
+Reelcard is designed for Windows, macOS, and Linux. FFmpeg and FFprobe must be
+installed separately, and codec support depends on the FFmpeg build and input
+video. Movie credits and other poster details must be entered manually; Reelcard
+does not look them up online. Frame sampling can take several minutes because
+each sample is decoded in a separate FFmpeg process.
 
 ## Development
 
-Install the development dependencies as described above. Run the test suite
-from the repository root with:
+Install the development dependencies instead of the runtime-only package:
 
 ```console
-python -m pytest
+python -m pip install -e ".[dev]"
+```
+
+Run the test suite from the repository root with coverage reporting:
+
+```console
+python -m pytest --cov=reelcard --cov-report=term-missing
 ```
 
 ## Licence
