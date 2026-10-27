@@ -11,6 +11,7 @@ import pytest
 from PIL import Image
 
 from reelcard.cli import main
+from reelcard.metadata import MetadataLookupError, MovieMetadata
 from reelcard.poster import DEFAULT_HEIGHT, DEFAULT_WIDTH
 from reelcard.video import VideoMetadata
 
@@ -30,6 +31,7 @@ def test_cli_help_lists_supported_options(capsys: pytest.CaptureFixture[str]) ->
         "--music",
         "--subtitle",
         "--credits",
+        "--imdb-id",
         "--output",
         "--format",
         "--stripes",
@@ -168,6 +170,8 @@ def test_cli_runs_pipeline_with_metadata_and_custom_options(
                 "3",
                 "--color-style",
                 "vivid",
+                "--imdb-id",
+                "tt0000001",
                 "--width",
                 "874",
                 "--height",
@@ -254,6 +258,83 @@ def test_cli_svg_format_uses_svg_output_and_default_extension(
         tmp_path / "Film.svg",
         overwrite=False,
     )
+
+
+def test_cli_lookup_fills_only_missing_manual_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "film.mp4"
+    input_path.touch()
+    monkeypatch.setenv("OMDB_API_KEY", "test-key")
+    metadata = VideoMetadata(60.0, 640, 480, 0)
+    barcode = Image.new("RGB", (1, 64), "red")
+    with (
+        patch(
+            "reelcard.cli.lookup_movie",
+            return_value=MovieMetadata(
+                title="Matched Film",
+                year=1984,
+                director="Lookup Director",
+                writer="Lookup Writer",
+                starring="Lookup Actor",
+            ),
+        ) as find,
+        patch("reelcard.cli.probe_video", return_value=metadata),
+        patch("reelcard.cli.iter_video_frames", return_value=iter(())),
+        patch("reelcard.cli.make_barcode", return_value=barcode),
+        patch("reelcard.cli.render_poster") as render,
+        patch("reelcard.cli.save_poster"),
+    ):
+        assert main(
+            [
+                str(input_path),
+                "--imdb-id",
+                "tt0000001",
+                "--title",
+                "Manual Film",
+                "--year",
+                "1999",
+                "--director",
+                "Manual Director",
+            ]
+        ) == 0
+
+    find.assert_called_once()
+    assert find.call_args.kwargs["imdb_id"] == "tt0000001"
+    assert find.call_args.kwargs["api_key"] == "test-key"
+    assert render.call_args.kwargs["title"] == "Manual Film"
+    assert render.call_args.kwargs["year"] == 1999
+    assert render.call_args.kwargs["director"] == "Manual Director"
+    assert render.call_args.kwargs["writer"] == "Lookup Writer"
+    assert render.call_args.kwargs["starring"] == "Lookup Actor"
+
+
+def test_cli_lookup_failure_warns_and_generates_poster(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_path = tmp_path / "Film.mp4"
+    input_path.touch()
+    metadata = VideoMetadata(60.0, 640, 480, 0)
+    barcode = Image.new("RGB", (1, 64), "red")
+
+    with (
+        patch(
+            "reelcard.cli.lookup_movie",
+            side_effect=MetadataLookupError("OMDB_API_KEY is missing"),
+        ),
+        patch("reelcard.cli.probe_video", return_value=metadata),
+        patch("reelcard.cli.iter_video_frames", return_value=iter(())),
+        patch("reelcard.cli.make_barcode", return_value=barcode),
+        patch("reelcard.cli.render_poster") as render,
+        patch("reelcard.cli.save_poster"),
+    ):
+        result = main([str(input_path), "--imdb-id", "tt0000001"])
+
+    assert result == 0
+    assert "Continuing without lookup" in capsys.readouterr().err
+    render.assert_called_once()
 
 
 def test_cli_svg_format_rejects_mismatched_output_extension(

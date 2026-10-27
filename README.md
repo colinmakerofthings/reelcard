@@ -7,7 +7,7 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Release:** 0.1.2 early release preview. The core workflow is usable, but
+> **Release:** 0.1.3 early release preview. The core workflow is usable, but
 > features and command-line options may change as the project develops.
 
 ## Example output
@@ -58,6 +58,7 @@ reelcard "My Film.mp4" --output "my-film-postcard.png" --director "A. Director"
 reelcard "My Film.mp4" --format svg
 reelcard "My Film.mp4" --color-style brighter --force
 reelcard "My Film.mp4" --color-style vivid --force
+reelcard "My Film.mp4" --imdb-id tt0087182
 ```
 
 The input filename supplies the title when `--title` is omitted. By default,
@@ -76,6 +77,7 @@ Run `reelcard --help` for all options:
 | `--music TEXT` | Optional music credit. |
 | `--subtitle TEXT` | Optional subtitle below the barcode. |
 | `--credits TEXT` | Optional footer credits. |
+| `--imdb-id ID` | Look up missing metadata for this movie via OMDb; requires an API key. |
 | `--output PATH` | Output destination; extension must match the selected format. |
 | `--format FORMAT` | Output format: `png` (default) or `svg`. |
 | `--stripes N` | Number of sampled frames/stripes (default 300; maximum 10000). |
@@ -86,15 +88,28 @@ Run `reelcard --help` for all options:
 | `--force` | Allow replacing an existing output file. |
 
 The postcard preset is approximately 148 × 105 mm at 300 DPI (1748 × 1240
-pixels). FFmpeg and FFprobe process the video locally; Reelcard does not use an
-online movie database or require network access. Barcode colors are calculated
-from the brighter 75% of each sampled frame, reducing shadow bias without an
-artificial brightness lift.
+pixels). FFmpeg and FFprobe process the video locally. Reelcard does not
+contact an online movie database unless metadata lookup is explicitly enabled.
+Barcode colors are calculated from the brighter 75% of each sampled frame,
+reducing shadow bias without an artificial brightness lift.
 
 Use `--color-style brighter` for a moderate brightness lift or `--color-style
 vivid` to increase color saturation. The default `natural` style keeps the
 original sampled colors. Use `--force` to replace the same output while
 comparing styles.
+
+## Optional metadata lookup
+
+Manual mode is the default and does not make network requests. To look up
+metadata for a specific movie, obtain an OMDb API key, set it in the
+`OMDB_API_KEY` environment variable, and pass the movie's IMDb ID with
+`--imdb-id`.
+
+Lookup fills the title, year, director, writer, and starring fields only when
+they were not supplied manually. OMDb does not provide every poster field, so
+music, subtitle, and credits remain manual. Missing credentials, network
+problems, and lookup failures produce a warning and Reelcard continues with
+manual values and defaults.
 
 ## Output
 
@@ -110,8 +125,9 @@ FFprobe, and selected frames are decoded by FFmpeg.
 Reelcard is designed for Windows, macOS, and Linux. FFmpeg and FFprobe must be
 installed separately, and codec support depends on the FFmpeg build and input
 video. Movie credits and other poster details must be entered manually; Reelcard
-does not look them up online. Frame sampling decodes the video in a single
-FFmpeg process but can still take time for long videos or high stripe counts.
+can optionally look up some fields through OMDb when requested. Frame sampling
+decodes the video in a single FFmpeg process but can still take time for long
+videos or high stripe counts.
 
 ## Development
 

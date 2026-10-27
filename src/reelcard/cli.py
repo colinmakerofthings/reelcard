@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import re
 import sys
 from collections.abc import Sequence
@@ -11,6 +12,7 @@ from pathlib import Path
 
 from reelcard.colors import make_barcode
 from reelcard.errors import ReelcardError
+from reelcard.metadata import MetadataLookupError, lookup_movie
 from reelcard.poster import (
     DEFAULT_DPI,
     DEFAULT_HEIGHT,
@@ -38,6 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--music", help="music credit")
     parser.add_argument("--subtitle", help="short descriptor below the barcode")
     parser.add_argument("--credits", help="optional footer credits")
+    parser.add_argument(
+        "--imdb-id",
+        help="look up missing metadata for this IMDb ID via OMDb",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -104,6 +110,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             overwrite=args.force,
         )
 
+        movie_metadata = None
+        if args.imdb_id:
+            try:
+                movie_metadata = lookup_movie(
+                    imdb_id=args.imdb_id,
+                    api_key=os.environ.get("OMDB_API_KEY"),
+                )
+                if movie_metadata is None:
+                    print(
+                        "reelcard: warning: no OMDb match found; using supplied "
+                        "metadata and defaults.",
+                        file=sys.stderr,
+                    )
+            except MetadataLookupError as exc:
+                print(
+                    f"reelcard: warning: {exc} Continuing without lookup.",
+                    file=sys.stderr,
+                )
+                movie_metadata = None
+
+        if movie_metadata is not None:
+            if args.title is None and movie_metadata.title:
+                title = movie_metadata.title
+
         print(f"Analyzing {input_path}...", file=sys.stderr)
         metadata = probe_video(input_path)
         print(f"Sampling {args.stripes} frames...", file=sys.stderr)
@@ -114,10 +144,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         render_options = {
             "title": title,
             "runtime_seconds": metadata.duration,
-            "year": args.year,
-            "director": args.director,
-            "writer": args.writer,
-            "starring": args.starring,
+            "year": args.year or (movie_metadata.year if movie_metadata else None),
+            "director": args.director
+            or (movie_metadata.director if movie_metadata else None),
+            "writer": args.writer or (movie_metadata.writer if movie_metadata else None),
+            "starring": args.starring
+            or (movie_metadata.starring if movie_metadata else None),
             "music": args.music,
             "subtitle": args.subtitle,
             "credits": args.credits,
