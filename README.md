@@ -7,15 +7,12 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Project status:** Early development. The command-line pipeline generates
-> postcard PNGs from local videos.
+## Example output
 
-## Planned features
+![Example Reelcard poster for The Empire Strikes Back (1980)](assets/example-empire-strikes-back.png)
 
-- A chronological colour barcode generated from a local video.
-- A landscape postcard design with title, optional year and credits, and runtime.
-- PNG output sized for printing at 300 DPI.
-- No accounts, hosted backend, telemetry, or network access during normal use.
+This landscape postcard was generated from a local video; the credits were
+provided as command-line options.
 
 ## Requirements
 
@@ -106,10 +103,6 @@ from the repository root with:
 ```console
 python -m pytest
 ```
-
-The package uses a `src` layout. Tests will be separated between pure
-algorithm/rendering checks and tests that need FFmpeg. Test videos should be
-small synthetic fixtures rather than copyrighted films.
 
 ## Licence
 
