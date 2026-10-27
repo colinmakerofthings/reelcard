@@ -16,7 +16,9 @@ from reelcard.poster import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
     render_poster,
+    render_svg,
     save_poster,
+    save_svg,
 )
 from reelcard.video import MAX_STRIPES, iter_video_frames, probe_video
 
@@ -39,7 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        help="PNG output path (defaults to a title-based name in the current directory)",
+        help="output path (defaults to a title-based name in the current directory)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("png", "svg"),
+        default="png",
+        help="output format (default: png)",
     )
     parser.add_argument(
         "--stripes",
@@ -75,7 +83,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     input_path = args.input
     title = args.title if args.title is not None else input_path.stem
-    output_path = args.output or Path.cwd() / f"{_safe_filename(title)}.png"
+    output_path = args.output or Path.cwd() / f"{_safe_filename(title)}.{args.format}"
 
     try:
         if not title.strip():
@@ -83,7 +91,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         width, height = _resolve_dimensions(args.width, args.height)
         _validate_dpi(args.dpi)
         _validate_stripes(args.stripes)
-        _validate_input_and_output(input_path, output_path, overwrite=args.force)
+        _validate_input_and_output(
+            input_path,
+            output_path,
+            output_format=args.format,
+            overwrite=args.force,
+        )
 
         print(f"Analyzing {input_path}...", file=sys.stderr)
         metadata = probe_video(input_path)
@@ -91,27 +104,31 @@ def main(argv: Sequence[str] | None = None) -> int:
         barcode = make_barcode(
             iter_video_frames(input_path, args.stripes, metadata=metadata)
         )
-        poster = render_poster(
-            barcode,
-            title=title,
-            runtime_seconds=metadata.duration,
-            year=args.year,
-            director=args.director,
-            writer=args.writer,
-            starring=args.starring,
-            music=args.music,
-            subtitle=args.subtitle,
-            credits=args.credits,
-            width=width,
-            height=height,
-            dpi=args.dpi,
-        )
-        save_poster(
-            poster,
-            output_path,
-            dpi=args.dpi,
-            overwrite=args.force,
-        )
+        render_options = {
+            "title": title,
+            "runtime_seconds": metadata.duration,
+            "year": args.year,
+            "director": args.director,
+            "writer": args.writer,
+            "starring": args.starring,
+            "music": args.music,
+            "subtitle": args.subtitle,
+            "credits": args.credits,
+            "width": width,
+            "height": height,
+            "dpi": args.dpi,
+        }
+        if args.format == "svg":
+            svg = render_svg(barcode, **render_options)
+            save_svg(svg, output_path, overwrite=args.force)
+        else:
+            poster = render_poster(barcode, **render_options)
+            save_poster(
+                poster,
+                output_path,
+                dpi=args.dpi,
+                overwrite=args.force,
+            )
     except (ReelcardError, ValueError, OSError) as exc:
         print(f"reelcard: error: {exc}", file=sys.stderr)
         return 2
@@ -183,12 +200,13 @@ def _validate_input_and_output(
     input_path: Path,
     output_path: Path,
     *,
+    output_format: str,
     overwrite: bool,
 ) -> None:
     if not input_path.is_file():
         raise ValueError(f"input does not exist or is not a file: {input_path}")
-    if output_path.suffix.lower() != ".png":
-        raise ValueError("output path must have a .png extension")
+    if output_path.suffix.lower() != f".{output_format}":
+        raise ValueError(f"output path must have a .{output_format} extension")
     if not output_path.parent.is_dir():
         raise ValueError(f"output directory does not exist: {output_path.parent}")
     if output_path.exists() and output_path.is_dir():

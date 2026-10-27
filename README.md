@@ -55,6 +55,7 @@ Examples:
 reelcard "My Film.mp4"
 reelcard "My Film.mp4" --title "My Film" --year 1994 --stripes 600
 reelcard "My Film.mp4" --output "my-film-postcard.png" --director "A. Director"
+reelcard "My Film.mp4" --format svg
 ```
 
 The input filename supplies the title when `--title` is omitted. By default,
@@ -73,7 +74,8 @@ Run `reelcard --help` for all options:
 | `--music TEXT` | Optional music credit. |
 | `--subtitle TEXT` | Optional subtitle below the barcode. |
 | `--credits TEXT` | Optional footer credits. |
-| `--output PATH` | PNG destination; parent directory must already exist. |
+| `--output PATH` | Output destination; extension must match the selected format. |
+| `--format FORMAT` | Output format: `png` (default) or `svg`. |
 | `--stripes N` | Number of sampled frames/stripes (default 300; maximum 10000). |
 | `--size postcard` | Named print-size preset (the default). |
 | `--width PX --height PX` | Custom landscape output dimensions; specify both. |
@@ -88,9 +90,12 @@ artificial brightness lift.
 
 ## Output
 
-Reelcard currently exports PNG images with print-resolution metadata. Video
-metadata is read locally using FFprobe, and selected frames are decoded by
-FFmpeg. SVG and other output formats are not supported yet.
+Reelcard exports PNG images with print-resolution metadata by default. Choose
+`--format svg` for an SVG with vector text and background; the barcode itself
+is drawn as vector rectangles too. The SVG embeds the Montserrat font so the
+typography remains consistent on computers without that font installed. Its
+physical dimensions use the selected DPI. Video metadata is read locally using
+FFprobe, and selected frames are decoded by FFmpeg.
 
 ## Supported platforms and limitations
 

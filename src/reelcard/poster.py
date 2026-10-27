@@ -1,8 +1,10 @@
-"""Postcard poster layout and PNG export."""
+"""Postcard poster layout and PNG/SVG export."""
 
 from __future__ import annotations
 
+import base64
 import math
+from html import escape
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -14,6 +16,7 @@ PAPER = (243, 242, 236)
 INK = (22, 23, 22)
 PLACEHOLDER = "NOT PROVIDED"
 _FONT_PATH = Path(__file__).parent / "fonts" / "Montserrat.ttf"
+_FONT_LICENSE_PATH = Path(__file__).parent / "fonts" / "Montserrat-OFL.txt"
 
 
 def render_poster(
@@ -230,6 +233,295 @@ def save_poster(
     if path.exists() and not overwrite:
         raise FileExistsError(f"Output already exists: {path}")
     poster.convert("RGB").save(path, format="PNG", dpi=(dpi, dpi))
+
+
+def render_svg(
+    barcode: Image.Image,
+    *,
+    title: str,
+    runtime_seconds: float,
+    year: int | None = None,
+    director: str | None = None,
+    writer: str | None = None,
+    starring: str | None = None,
+    music: str | None = None,
+    subtitle: str | None = None,
+    credits: str | None = None,
+    width: int = DEFAULT_WIDTH,
+    height: int = DEFAULT_HEIGHT,
+    dpi: float = DEFAULT_DPI,
+) -> str:
+    """Render the poster as self-contained SVG with an embedded font."""
+    _validate_dimensions(width, height)
+    _validate_dpi(dpi)
+    if not isinstance(barcode, Image.Image) or barcode.width <= 0 or barcode.height <= 0:
+        raise ValueError("barcode must be a non-empty Pillow image")
+    if barcode.width > 10_000:
+        raise ValueError("barcode must not contain more than 10000 stripes")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("title must not be empty")
+    if year is not None and (
+        isinstance(year, bool) or not isinstance(year, int) or not 1 <= year <= 9999
+    ):
+        raise ValueError("year must be an integer between 1 and 9999")
+
+    runtime_label = _format_runtime(runtime_seconds)
+    title_text = _normalize_text(title).upper()
+    director_text = _normalize_optional_text(director) or PLACEHOLDER
+    writer_text = _normalize_optional_text(writer) or PLACEHOLDER
+    starring_text = _normalize_optional_text(starring) or PLACEHOLDER
+    music_text = _normalize_optional_text(music) or PLACEHOLDER
+    subtitle_text = _normalize_optional_text(subtitle)
+    credits_text = _normalize_optional_text(credits)
+
+    elements: list[str] = [
+        f'<rect width="{width}" height="{height}" fill="{_svg_color(PAPER)}"/>'
+    ]
+    content_left = round(width * 0.045)
+    content_right = round(width * 0.955)
+    content_width = content_right - content_left
+
+    title_max_width = round(content_width * 0.75)
+    title_initial_size = max(10, round(width * 0.040))
+    title_minimum_size = max(9, round(width * 0.025))
+    try:
+        title_font = _fit_single_line(
+            title_text,
+            max_width=title_max_width,
+            initial_size=title_initial_size,
+            minimum_size=title_minimum_size,
+            weight=700,
+        )
+        title_lines = [title_text]
+    except ValueError:
+        title_font, title_lines = _fit_wrapped_text(
+            title_text,
+            max_width=title_max_width,
+            max_lines=2,
+            initial_size=title_initial_size,
+            minimum_size=title_minimum_size,
+            weight=700,
+        )
+    title_line_height = _line_height(title_font)
+    title_top = round(height * 0.055)
+    for index, line in enumerate(title_lines):
+        elements.append(
+            _svg_text(
+                line,
+                x=content_left,
+                top=title_top + index * title_line_height,
+                font=title_font,
+                weight=700,
+            )
+        )
+
+    year_text = str(year) if year is not None else "YEAR N/A"
+    year_font = _fit_single_line(
+        year_text,
+        max_width=round(content_width * 0.25),
+        initial_size=max(10, round(width * 0.040)),
+        minimum_size=max(9, round(width * 0.022)),
+        weight=700,
+    )
+    elements.append(
+        _svg_text(
+            year_text,
+            x=content_right,
+            top=title_top,
+            font=year_font,
+            weight=700,
+            anchor="end",
+        )
+    )
+
+    metadata_fields = (
+        ("DIRECTED BY", director_text),
+        ("WRITTEN BY", writer_text),
+        ("STARRING", starring_text),
+        ("MUSIC BY", music_text),
+    )
+    column_width = content_width / len(metadata_fields)
+    metadata_top = round(height * 0.135)
+    label_font = _font(max(9, round(width * 0.010)), weight=700)
+    value_font = _font(max(9, round(width * 0.010)), weight=400)
+    for index, (label, value) in enumerate(metadata_fields):
+        column_x = round(content_left + index * column_width)
+        elements.append(
+            _svg_text(
+                label,
+                x=column_x,
+                top=metadata_top,
+                font=label_font,
+                weight=700,
+            )
+        )
+        body_font, lines = _fit_wrapped_text(
+            value,
+            max_width=round(column_width * 0.92),
+            max_lines=4,
+            initial_size=value_font.size,
+            minimum_size=max(8, round(width * 0.008)),
+            weight=400,
+        )
+        for line_index, line in enumerate(lines):
+            elements.append(
+                _svg_text(
+                    line,
+                    x=column_x,
+                    top=metadata_top
+                    + round(height * 0.018)
+                    + line_index * _line_height(body_font),
+                    font=body_font,
+                    weight=400,
+                )
+            )
+
+    barcode_box = (
+        content_left,
+        round(height * 0.225),
+        content_right,
+        round(height * 0.895),
+    )
+    resized_barcode = barcode.convert("RGB").resize(
+        (barcode_box[2] - barcode_box[0], barcode_box[3] - barcode_box[1]),
+        Image.Resampling.NEAREST,
+    )
+    barcode_pixels = resized_barcode.load()
+    run_start = 0
+    run_color = barcode_pixels[0, 0]
+    for x in range(1, resized_barcode.width):
+        color = barcode_pixels[x, 0]
+        if color == run_color:
+            continue
+        elements.append(
+            f'<rect x="{barcode_box[0] + run_start}" y="{barcode_box[1]}" '
+            f'width="{x - run_start}" height="{barcode_box[3] - barcode_box[1]}" '
+            f'fill="{_svg_color(run_color)}"/>'
+        )
+        run_start = x
+        run_color = color
+    elements.append(
+        f'<rect x="{barcode_box[0] + run_start}" y="{barcode_box[1]}" '
+        f'width="{resized_barcode.width - run_start}" '
+        f'height="{barcode_box[3] - barcode_box[1]}" '
+        f'fill="{_svg_color(run_color)}"/>'
+    )
+
+    footer_y = round(height * 0.91)
+    if credits_text is not None:
+        credits_font = _fit_single_line(
+            credits_text,
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
+            weight=400,
+        )
+        elements.append(
+            _svg_text(
+                credits_text.upper(),
+                x=content_left,
+                top=footer_y,
+                font=credits_font,
+                weight=400,
+            )
+        )
+
+    if subtitle_text is not None:
+        subtitle_font = _fit_single_line(
+            subtitle_text,
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
+            weight=400,
+        )
+        elements.append(
+            _svg_text(
+                subtitle_text,
+                x=content_left,
+                top=footer_y + round(height * 0.021),
+                font=subtitle_font,
+                weight=400,
+            )
+        )
+
+    runtime_font = _fit_single_line(
+        runtime_label,
+        max_width=round(content_width * 0.28),
+        initial_size=max(9, round(width * 0.018)),
+        minimum_size=max(8, round(width * 0.012)),
+        weight=500,
+    )
+    elements.append(
+        _svg_text(
+            runtime_label,
+            x=content_right,
+            top=footer_y,
+            font=runtime_font,
+            weight=500,
+            anchor="end",
+        )
+    )
+
+    font_data = base64.b64encode(_FONT_PATH.read_bytes()).decode("ascii")
+    font_license = escape(_FONT_LICENSE_PATH.read_text(encoding="utf-8"))
+    physical_width = width / dpi * 25.4
+    physical_height = height / dpi * 25.4
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{physical_width:.4f}mm" height="{physical_height:.4f}mm" '
+        f'viewBox="0 0 {width} {height}" role="img">'
+        f"<title>{escape(_normalize_text(title))}</title>"
+        f"<metadata>{font_license}</metadata>"
+        "<defs><style>"
+        "@font-face{font-family:Montserrat;font-style:normal;"
+        "font-weight:100 900;"
+        f"src:url(data:font/ttf;base64,{font_data}) format('truetype');"
+        "}"
+        "</style></defs>"
+        + "".join(elements)
+        + "</svg>"
+    )
+
+
+def save_svg(
+    svg: str,
+    output_path: str | Path,
+    *,
+    overwrite: bool = False,
+) -> None:
+    """Save a rendered poster as SVG."""
+    if not isinstance(svg, str) or not svg.startswith("<svg "):
+        raise ValueError("svg must be a rendered poster document")
+    path = Path(output_path)
+    if path.suffix.lower() != ".svg":
+        raise ValueError("poster output path must have a .svg extension")
+    if not path.parent.is_dir():
+        raise FileNotFoundError(f"Output directory does not exist: {path.parent}")
+    if path.exists() and not overwrite:
+        raise FileExistsError(f"Output already exists: {path}")
+    path.write_text(svg, encoding="utf-8")
+
+
+def _svg_color(color: tuple[int, int, int]) -> str:
+    return f"#{color[0]:02x}{color[1]:02x}{color[2]:02x}"
+
+
+def _svg_text(
+    text: str,
+    *,
+    x: int,
+    top: int,
+    font: ImageFont.FreeTypeFont,
+    weight: int,
+    anchor: str = "start",
+) -> str:
+    baseline = top + font.getmetrics()[0]
+    return (
+        f'<text x="{x}" y="{baseline}" text-anchor="{anchor}" '
+        f'font-family="Montserrat" font-size="{font.size}" '
+        f'font-weight="{weight}" fill="{_svg_color(INK)}">'
+        f"{escape(text)}</text>"
+    )
 
 
 def _validate_dimensions(width: int, height: int) -> None:

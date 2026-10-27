@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import base64
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
+from reelcard import poster as poster_module
 from reelcard.poster import (
     DEFAULT_DPI,
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
     PAPER,
     render_poster,
+    render_svg,
     save_poster,
+    save_svg,
 )
 
 
@@ -187,3 +193,72 @@ def test_save_poster_validates_extension_and_directory(tmp_path: Path) -> None:
         save_poster(poster, tmp_path / "film.jpg")
     with pytest.raises(FileNotFoundError, match="directory"):
         save_poster(poster, tmp_path / "missing" / "film.png")
+
+
+def test_render_svg_embeds_font_and_barcode_and_preserves_layout() -> None:
+    barcode = Image.new("RGB", (2, 1))
+    barcode.putdata([(255, 0, 0), (0, 0, 255)])
+    svg = render_svg(
+        barcode,
+        title="A Film & a Story",
+        year=1994,
+        runtime_seconds=5_520,
+        director="A Director",
+        subtitle="A thoughtful subtitle",
+        credits="Written by Someone",
+        width=874,
+        height=620,
+    )
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    texts = [element.text for element in root.findall(".//svg:text", namespace)]
+    barcode_rects = [
+        element
+        for element in root.findall(".//svg:rect", namespace)
+        if element.attrib.get("y") == str(round(620 * 0.225))
+    ]
+    style = root.find(".//svg:style", namespace)
+    metadata = root.find(".//svg:metadata", namespace)
+    font_match = re.search(r"base64,([^)]*)", style.text if style is not None else "")
+
+    assert root.attrib["viewBox"] == "0 0 874 620"
+    assert root.attrib["width"] == "73.9987mm"
+    assert "A FILM & A STORY" in texts
+    assert "1994" in texts
+    assert [element.attrib["fill"] for element in barcode_rects] == [
+        "#ff0000",
+        "#0000ff",
+    ]
+    assert sum(int(element.attrib["width"]) for element in barcode_rects) == (
+        round(874 * 0.955) - round(874 * 0.045)
+    )
+    assert all(
+        element.attrib["height"]
+        == str(round(620 * 0.895) - round(620 * 0.225))
+        for element in barcode_rects
+    )
+    assert root.find(".//svg:image", namespace) is None
+    assert style is not None and "font-family:Montserrat" in style.text
+    assert font_match is not None
+    assert base64.b64decode(font_match.group(1)) == poster_module._FONT_PATH.read_bytes()
+    assert metadata is not None and "SIL OPEN FONT LICENSE" in metadata.text
+
+
+def test_save_svg_writes_utf8_and_refuses_to_overwrite(tmp_path: Path) -> None:
+    path = tmp_path / "film.svg"
+    svg = render_svg(_barcode(), title="Film", runtime_seconds=60, width=874, height=620)
+
+    save_svg(svg, path)
+
+    assert path.read_text(encoding="utf-8") == svg
+    with pytest.raises(FileExistsError, match="already exists"):
+        save_svg(svg, path)
+
+
+def test_save_svg_validates_extension_and_directory(tmp_path: Path) -> None:
+    svg = render_svg(_barcode(), title="Film", runtime_seconds=60, width=874, height=620)
+
+    with pytest.raises(ValueError, match="\\.svg"):
+        save_svg(svg, tmp_path / "film.png")
+    with pytest.raises(FileNotFoundError, match="directory"):
+        save_svg(svg, tmp_path / "missing" / "film.svg")

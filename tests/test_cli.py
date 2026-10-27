@@ -31,6 +31,7 @@ def test_cli_help_lists_supported_options(capsys: pytest.CaptureFixture[str]) ->
         "--subtitle",
         "--credits",
         "--output",
+        "--format",
         "--stripes",
         "--size",
         "--width",
@@ -219,6 +220,56 @@ def test_cli_default_output_uses_sanitized_title_and_preset_size(
     assert render.call_args.kwargs["width"] == DEFAULT_WIDTH
     assert render.call_args.kwargs["height"] == DEFAULT_HEIGHT
     assert save.call_args.args[1] == tmp_path / "My-Film.png"
+
+
+def test_cli_svg_format_uses_svg_output_and_default_extension(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "Film.mp4"
+    input_path.touch()
+    monkeypatch.chdir(tmp_path)
+    metadata = VideoMetadata(60.0, 640, 480, 0)
+    barcode = Image.new("RGB", (1, 64), "red")
+
+    with (
+        patch("reelcard.cli.probe_video", return_value=metadata),
+        patch("reelcard.cli.iter_video_frames", return_value=iter(())),
+        patch("reelcard.cli.make_barcode", return_value=barcode),
+        patch("reelcard.cli.render_poster") as render_png,
+        patch("reelcard.cli.render_svg", return_value="<svg rendered/>") as render_svg,
+        patch("reelcard.cli.save_svg") as save_svg,
+    ):
+        assert main([str(input_path), "--format", "svg"]) == 0
+
+    render_png.assert_not_called()
+    render_svg.assert_called_once()
+    save_svg.assert_called_once_with(
+        "<svg rendered/>",
+        tmp_path / "Film.svg",
+        overwrite=False,
+    )
+
+
+def test_cli_svg_format_rejects_mismatched_output_extension(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_path = tmp_path / "film.mp4"
+    input_path.touch()
+
+    result = main(
+        [
+            str(input_path),
+            "--format",
+            "svg",
+            "--output",
+            str(tmp_path / "film.png"),
+        ]
+    )
+
+    assert result == 2
+    assert ".svg extension" in capsys.readouterr().err
 
 
 @pytest.mark.skipif(
