@@ -110,8 +110,8 @@ FFprobe, and selected frames are decoded by FFmpeg.
 Reelcard is designed for Windows, macOS, and Linux. FFmpeg and FFprobe must be
 installed separately, and codec support depends on the FFmpeg build and input
 video. Movie credits and other poster details must be entered manually; Reelcard
-does not look them up online. Frame sampling can take several minutes because
-each sample is decoded in a separate FFmpeg process.
+does not look them up online. Frame sampling decodes the video in a single
+FFmpeg process but can still take time for long videos or high stripe counts.
 
 ## Development
 
