@@ -32,7 +32,7 @@ operating system, then check that both `ffmpeg -version` and
 
 ## Installation
 
-Reelcard is not yet published on PyPI. Install the 0.1.0 preview from source:
+Reelcard is not yet published on PyPI. Install the 0.1.3 preview from source:
 
 ```console
 git clone https://github.com/colinmakerofthings/reelcard.git
