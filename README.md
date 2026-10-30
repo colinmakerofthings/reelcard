@@ -1,6 +1,6 @@
 # Reelcard
 
-[![Tests](https://github.com/colinmakerofthings/reelcard/actions/workflows/tests.yml/badge.svg)](https://github.com/colinmakerofthings/reelcard/actions/workflows/tests.yml)
+[![Tests](https://github.com/colinmakerofthings/reelcard-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/colinmakerofthings/reelcard-cli/actions/workflows/tests.yml)
 
 Reelcard is a local command-line tool for turning a video into a postcard-sized
 film-barcode print. It samples frames in chronological order, calculates a
@@ -35,7 +35,7 @@ operating system, then check that both `ffmpeg -version` and
 Reelcard is not yet published on PyPI. Install the 0.1.3 preview from source:
 
 ```console
-git clone https://github.com/colinmakerofthings/reelcard.git
+git clone https://github.com/colinmakerofthings/reelcard-cli.git
 cd reelcard
 python -m venv .venv
 ```
