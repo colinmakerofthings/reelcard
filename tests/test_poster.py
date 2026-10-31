@@ -88,17 +88,239 @@ def test_render_poster_fills_missing_metadata_with_clear_placeholders() -> None:
         runtime_seconds=60,
     )
     metadata_y = round(DEFAULT_HEIGHT * 0.135)
-    column_width = round(DEFAULT_WIDTH * 0.91 / 4)
-    for index in range(4):
+    fields = (
+        ("DIRECTED BY", "NOT PROVIDED"),
+        ("WRITTEN BY", "NOT PROVIDED"),
+        ("STARRING", "NOT PROVIDED"),
+        ("RUNTIME", "1 MIN"),
+    )
+    label_font = poster_module._font(max(9, round(DEFAULT_WIDTH * 0.010)), weight=700)
+    value_font = poster_module._font(max(9, round(DEFAULT_WIDTH * 0.010)), weight=400)
+    columns = poster_module._metadata_column_layout(
+        fields,
+        content_left=round(DEFAULT_WIDTH * 0.045),
+        content_width=round(DEFAULT_WIDTH * 0.955) - round(DEFAULT_WIDTH * 0.045),
+        gap=round(DEFAULT_WIDTH * 0.02),
+        label_font=label_font,
+        value_font=value_font,
+    )
+    for column_x, column_width in columns:
         region = poster.crop(
             (
-                round(DEFAULT_WIDTH * 0.045) + index * column_width,
+                column_x,
                 metadata_y,
-                round(DEFAULT_WIDTH * 0.045) + (index + 1) * column_width,
+                column_x + column_width,
                 metadata_y + 55,
             )
         )
         assert len(set(region.getdata())) > 1
+
+
+def test_render_svg_sizes_metadata_columns_to_content() -> None:
+    svg = render_svg(
+        _barcode(),
+        title="Film",
+        runtime_seconds=60,
+        director="A Director",
+        writer="A considerably longer writer credit",
+        starring="Lead Cast",
+        runtime="122 min",
+        width=874,
+        height=620,
+    )
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    labels = {
+        element.text: int(element.attrib["x"])
+        for element in root.findall(".//svg:text", namespace)
+        if element.text in {"DIRECTED BY", "WRITTEN BY", "STARRING", "RUNTIME"}
+    }
+    positions = [
+        labels[label]
+        for label in ("DIRECTED BY", "WRITTEN BY", "STARRING", "RUNTIME")
+    ]
+    gaps = [right - left for left, right in zip(positions, positions[1:])]
+
+    assert positions == sorted(positions)
+    assert len(set(gaps)) > 1
+    assert positions[0] == round(874 * 0.045)
+    assert positions[-1] < round(874 * 0.75)
+
+
+def test_render_svg_moves_metadata_and_barcode_below_wrapped_title() -> None:
+    svg = render_svg(
+        _barcode(),
+        title="Star Wars: Episode V - The Empire Strikes Back",
+        year=1980,
+        runtime_seconds=7_440,
+        director="Irvin Kershner",
+        writer="Leigh Brackett, Lawrence Kasdan, George Lucas",
+        starring="Mark Hamill, Harrison Ford, Carrie Fisher",
+        rating="PG",
+    )
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    texts = root.findall(".//svg:text", namespace)
+    title_lines = [
+        element
+        for element in texts
+        if int(element.attrib["x"]) == round(DEFAULT_WIDTH * 0.045)
+        and int(element.attrib["font-size"]) > round(DEFAULT_WIDTH * 0.02)
+    ]
+    metadata_labels = [
+        element
+        for element in texts
+        if element.text in {
+            "DIRECTED BY",
+            "WRITTEN BY",
+            "STARRING",
+            "RUNTIME",
+            "RATED",
+            "IMDB RATING",
+        }
+    ]
+    barcode_top = min(
+        int(element.attrib["y"])
+        for element in root.findall(".//svg:rect", namespace)
+        if "y" in element.attrib
+    )
+    title_bottom = max(int(element.attrib["y"]) for element in title_lines)
+    metadata_top = min(int(element.attrib["y"]) for element in metadata_labels)
+
+    assert len(title_lines) == 2
+    assert metadata_top > title_bottom
+    assert barcode_top > max(
+        int(element.attrib["y"])
+        for element in texts
+        if int(element.attrib["y"]) >= metadata_top
+    )
+
+
+def test_render_svg_uses_consistent_title_font_size_for_wrapped_titles() -> None:
+    short_svg = render_svg(
+        _barcode(),
+        title="Interstellar",
+        runtime_seconds=60,
+        width=874,
+        height=620,
+    )
+    long_svg = render_svg(
+        _barcode(),
+        title="Star Wars: Episode V - The Empire Strikes Back",
+        runtime_seconds=60,
+        width=874,
+        height=620,
+    )
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    short_root = ET.fromstring(short_svg)
+    long_root = ET.fromstring(long_svg)
+    short_title = next(
+        element
+        for element in short_root.findall(".//svg:text", namespace)
+        if element.text == "INTERSTELLAR"
+    )
+    long_titles = [
+        element
+        for element in long_root.findall(".//svg:text", namespace)
+        if element.text in {
+            "STAR WARS: EPISODE V - THE",
+            "EMPIRE STRIKES BACK",
+        }
+    ]
+
+    assert len(long_titles) == 2
+    assert all(
+        element.attrib["font-size"] == short_title.attrib["font-size"]
+        for element in long_titles
+    )
+
+
+def test_render_svg_does_not_include_music_credit_section() -> None:
+    svg = render_svg(
+        _barcode(),
+        title="Film",
+        runtime_seconds=60,
+        runtime="122 min",
+        rating="R",
+        imdb_rating="8.0/10",
+        plot=(
+            "Violence and mayhem ensue after a hunter stumbles upon the aftermath "
+            "of a drug deal gone wrong and over two million dollars in cash near "
+            "the Rio Grande."
+        ),
+        width=874,
+        height=620,
+    )
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    text_elements = root.findall(".//svg:text", namespace)
+    texts = [element.text for element in text_elements]
+    barcode = next(
+        element
+        for element in root.findall(".//svg:rect", namespace)
+        if element.attrib.get("y") == str(round(620 * 0.225))
+    )
+    barcode_bottom = int(barcode.attrib["y"]) + int(barcode.attrib["height"])
+
+    assert "MUSIC BY" not in texts
+    assert "RUNTIME" in texts
+    assert "122 min" in texts
+    rating_label = next(element for element in text_elements if element.text == "RATED")
+    rating_value = next(element for element in text_elements if element.text == "R")
+    imdb_rating_label = next(
+        element for element in text_elements if element.text == "IMDB RATING"
+    )
+    imdb_rating_value = next(
+        element for element in text_elements if element.text == "8.0/10"
+    )
+    runtime_label = next(element for element in text_elements if element.text == "RUNTIME")
+    runtime_value = next(element for element in text_elements if element.text == "122 min")
+    assert rating_label.attrib["y"] == runtime_label.attrib["y"]
+    assert rating_value.attrib["y"] == runtime_value.attrib["y"]
+    assert rating_label.attrib["x"] == rating_value.attrib["x"]
+    assert imdb_rating_label.attrib["y"] == runtime_label.attrib["y"]
+    assert imdb_rating_value.attrib["y"] == runtime_value.attrib["y"]
+    plot_elements = [
+        element
+        for element in text_elements
+        if int(element.attrib["y"]) >= barcode_bottom
+    ]
+    assert " ".join(element.text or "" for element in plot_elements) == (
+        "Violence and mayhem ensue after a hunter stumbles upon the aftermath "
+        "of a drug deal gone wrong and over two million dollars in cash near "
+        "the Rio Grande."
+    )
+
+
+def test_plot_and_footer_text_fit_small_landscape_canvas() -> None:
+    svg = render_svg(
+        _barcode(),
+        title="Film",
+        runtime_seconds=60,
+        plot=(
+            "Violence and mayhem ensue after a hunter stumbles upon the aftermath "
+            "of a drug deal gone wrong and over two million dollars in cash near "
+            "the Rio Grande."
+        ),
+        credits="Some credits",
+        subtitle="A subtitle",
+        width=500,
+        height=400,
+    )
+    root = ET.fromstring(svg)
+    namespace = {"svg": "http://www.w3.org/2000/svg"}
+    footer_text = [
+        element
+        for element in root.findall(".//svg:text", namespace)
+        if int(element.attrib["y"]) >= round(400 * 0.8)
+    ]
+
+    assert "SOME CREDITS" in [element.text for element in footer_text]
+    assert "A subtitle" in [element.text for element in footer_text]
+    assert all(
+        int(element.attrib["y"]) + int(element.attrib["font-size"]) <= 400
+        for element in footer_text
+    )
 
 
 def test_render_poster_wraps_long_titles_and_normalizes_whitespace() -> None:
@@ -225,6 +447,8 @@ def test_render_svg_embeds_font_and_barcode_and_preserves_layout() -> None:
     assert root.attrib["width"] == "73.9987mm"
     assert "A FILM & A STORY" in texts
     assert "1994" in texts
+    assert "RUNTIME" in texts
+    assert "1H 32M" in texts
     assert [element.attrib["fill"] for element in barcode_rects] == [
         "#ff0000",
         "#0000ff",

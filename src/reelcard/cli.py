@@ -37,7 +37,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--director", help="director credit")
     parser.add_argument("--writer", help="writer credit")
     parser.add_argument("--starring", help="lead cast")
-    parser.add_argument("--music", help="music credit")
+    parser.add_argument(
+        "--runtime",
+        type=_parse_runtime,
+        help="runtime label (e.g. '122 min'; overrides IMDb and video runtime)",
+    )
+    parser.add_argument("--rating", help="MPAA film rating")
+    parser.add_argument("--imdb-rating", help="IMDb score (e.g. 8.0/10)")
+    parser.add_argument("--plot", help="short plot summary for the poster footer")
     parser.add_argument("--subtitle", help="short descriptor below the barcode")
     parser.add_argument("--credits", help="optional footer credits")
     parser.add_argument(
@@ -150,7 +157,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "writer": args.writer or (movie_metadata.writer if movie_metadata else None),
             "starring": args.starring
             or (movie_metadata.starring if movie_metadata else None),
-            "music": args.music,
+            "runtime": args.runtime or (movie_metadata.runtime if movie_metadata else None),
+            "rating": args.rating or (movie_metadata.rating if movie_metadata else None),
+            "imdb_rating": args.imdb_rating
+            or (movie_metadata.imdb_rating if movie_metadata else None),
+            "plot": args.plot or (movie_metadata.plot if movie_metadata else None),
             "subtitle": args.subtitle,
             "credits": args.credits,
             "width": width,
@@ -184,6 +195,13 @@ def _parse_year(value: str) -> int:
     if not 1 <= year <= 9999:
         raise argparse.ArgumentTypeError("year must be between 1 and 9999")
     return year
+
+
+def _parse_runtime(value: str) -> str:
+    runtime = " ".join(value.split())
+    if not runtime:
+        raise argparse.ArgumentTypeError("runtime must not be empty")
+    return runtime
 
 
 def _positive_int(value: str) -> int:

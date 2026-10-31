@@ -26,6 +26,10 @@ class MovieMetadata:
     director: str | None = None
     writer: str | None = None
     starring: str | None = None
+    runtime: str | None = None
+    rating: str | None = None
+    imdb_rating: str | None = None
+    plot: str | None = None
 
 
 def lookup_movie(*, imdb_id: str, api_key: str | None) -> MovieMetadata:
@@ -41,12 +45,26 @@ def lookup_movie(*, imdb_id: str, api_key: str | None) -> MovieMetadata:
 
     year_text = _field(payload, "Year")
     year_match = re.match(r"\d{4}", year_text or "")
+    ratings = payload.get("Ratings")
+    imdb_rating = None
+    if isinstance(ratings, list):
+        for rating in ratings:
+            if isinstance(rating, dict) and rating.get("Source") == "Internet Movie Database":
+                value = rating.get("Value")
+                if isinstance(value, str) and value.strip() and value != "N/A":
+                    imdb_rating = " ".join(value.split())
+                    break
+
     return MovieMetadata(
         title=_field(payload, "Title"),
         year=int(year_match.group()) if year_match else None,
         director=_field(payload, "Director"),
         writer=_field(payload, "Writer"),
         starring=_field(payload, "Actors"),
+        runtime=_field(payload, "Runtime"),
+        rating=_field(payload, "Rated"),
+        imdb_rating=imdb_rating,
+        plot=_field(payload, "Plot"),
     )
 
 

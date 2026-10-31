@@ -25,6 +25,13 @@ def test_lookup_movie_fetches_details_by_imdb_id() -> None:
         "Director": "A Director",
         "Writer": "A Writer",
         "Actors": "An Actor",
+        "Runtime": "122 min",
+        "Rated": "R",
+        "Plot": "A concise plot summary.",
+        "Ratings": [
+            {"Source": "Rotten Tomatoes", "Value": "93%"},
+            {"Source": "Internet Movie Database", "Value": "8.0/10"},
+        ],
         "Music": "N/A",
     }
 
@@ -43,12 +50,36 @@ def test_lookup_movie_fetches_details_by_imdb_id() -> None:
     assert result.director == "A Director"
     assert result.writer == "A Writer"
     assert result.starring == "An Actor"
+    assert result.runtime == "122 min"
+    assert result.rating == "R"
+    assert result.imdb_rating == "8.0/10"
+    assert result.plot == "A concise plot summary."
     assert urlopen.call_count == 1
     request = urlopen.call_args.args[0]
     assert isinstance(request, Request)
     query = parse_qs(urlparse(request.full_url).query)
     assert query["i"] == ["tt0000001"]
     assert query["apikey"] == ["test-key"]
+
+
+@pytest.mark.parametrize(
+    "ratings",
+    [
+        None,
+        [],
+        [{"Source": "Rotten Tomatoes", "Value": "93%"}],
+        [{"Source": "Internet Movie Database", "Value": "N/A"}],
+    ],
+)
+def test_lookup_movie_ignores_missing_imdb_rating(ratings: object) -> None:
+    payload: dict[str, object] = {"Response": "True", "Ratings": ratings}
+    with patch(
+        "reelcard.metadata.urlopen",
+        return_value=_response(payload),
+    ):
+        result = lookup_movie(imdb_id="tt0000001", api_key="test-key")
+
+    assert result.imdb_rating is None
 
 
 def test_lookup_movie_reports_missing_api_key() -> None:
