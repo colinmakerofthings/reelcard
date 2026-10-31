@@ -7,14 +7,17 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Release:** 0.1.5 stable release.
+> **First stable release:** [v1.0.0](https://github.com/colinmakerofthings/reelcard-cli/releases/tag/v1.0.0).
 
-## Example output
+## Example posters
 
-![Example Reelcard poster for The Empire Strikes Back (1980)](assets/example-empire-strikes-back.png)
+### Star Wars trilogy
 
-This landscape postcard was generated from a local video; the credits were
-provided as command-line options.
+![Combined Reelcard posters for the Star Wars trilogy (1977, 1980, and 1983)](assets/star-wars-trilogy-1977-1983.png)
+
+### Blade Runner series
+
+![Combined Reelcard posters for the Blade Runner series (1982 and 2017)](assets/blade-runner-series-1982-2017.png)
 
 ## Requirements
 
@@ -31,11 +34,11 @@ operating system, then check that both `ffmpeg -version` and
 
 ## Installation
 
-Reelcard is not yet published on PyPI. Install the stable 0.1.5 release from
-source:
+The package is not yet available on PyPI. Install the stable v1.0.0 release
+from source:
 
 ```console
-git clone --branch v0.1.5 --depth 1 https://github.com/colinmakerofthings/reelcard-cli.git
+git clone --branch v1.0.0 --depth 1 https://github.com/colinmakerofthings/reelcard-cli.git
 cd reelcard-cli
 python -m venv .venv
 ```
