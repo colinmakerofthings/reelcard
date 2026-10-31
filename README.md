@@ -7,8 +7,7 @@ film-barcode print. It samples frames in chronological order, calculates a
 representative colour for each, and arranges the colours as vertical stripes
 within a carefully typeset poster.
 
-> **Release:** 0.1.3 early release preview. The core workflow is usable, but
-> features and command-line options may change as the project develops.
+> **Release:** 0.1.5 stable release.
 
 ## Example output
 
@@ -32,11 +31,12 @@ operating system, then check that both `ffmpeg -version` and
 
 ## Installation
 
-Reelcard is not yet published on PyPI. Install the 0.1.3 preview from source:
+Reelcard is not yet published on PyPI. Install the stable 0.1.5 release from
+source:
 
 ```console
-git clone https://github.com/colinmakerofthings/reelcard-cli.git
-cd reelcard
+git clone --branch v0.1.5 --depth 1 https://github.com/colinmakerofthings/reelcard-cli.git
+cd reelcard-cli
 python -m venv .venv
 ```
 
