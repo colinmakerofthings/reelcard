@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import math
+from dataclasses import dataclass
 from html import escape
 from pathlib import Path
 
@@ -19,6 +20,29 @@ _FONT_PATH = Path(__file__).parent / "fonts" / "Montserrat.ttf"
 _FONT_LICENSE_PATH = Path(__file__).parent / "fonts" / "Montserrat-OFL.txt"
 
 
+@dataclass(frozen=True)
+class _FooterLayout:
+    top: int
+    barcode_top: int
+    barcode_bottom: int
+    plot_lines: list[str]
+    plot_font: ImageFont.FreeTypeFont | None
+    credits_top: int
+    credits_font: ImageFont.FreeTypeFont | None
+    subtitle_top: int
+    subtitle_font: ImageFont.FreeTypeFont | None
+
+
+@dataclass(frozen=True)
+class _MetadataFieldLayout:
+    label: str
+    x: int
+    label_font: ImageFont.FreeTypeFont
+    value_font: ImageFont.FreeTypeFont
+    value_top: int
+    lines: list[str]
+
+
 def render_poster(
     barcode: Image.Image,
     *,
@@ -28,7 +52,10 @@ def render_poster(
     director: str | None = None,
     writer: str | None = None,
     starring: str | None = None,
-    music: str | None = None,
+    runtime: str | None = None,
+    rating: str | None = None,
+    imdb_rating: str | None = None,
+    plot: str | None = None,
     subtitle: str | None = None,
     credits: str | None = None,
     width: int = DEFAULT_WIDTH,
@@ -48,12 +75,14 @@ def render_poster(
         isinstance(year, bool) or not isinstance(year, int) or not 1 <= year <= 9999
     ):
         raise ValueError("year must be an integer between 1 and 9999")
-    runtime_label = _format_runtime(runtime_seconds)
+    runtime_label = _normalize_optional_text(runtime) or _format_runtime(runtime_seconds)
     title_text = _normalize_text(title)
     director_text = _normalize_optional_text(director) or PLACEHOLDER
     writer_text = _normalize_optional_text(writer) or PLACEHOLDER
     starring_text = _normalize_optional_text(starring) or PLACEHOLDER
-    music_text = _normalize_optional_text(music) or PLACEHOLDER
+    rating_text = _normalize_optional_text(rating)
+    imdb_rating_text = _normalize_optional_text(imdb_rating)
+    plot_text = _normalize_optional_text(plot)
     subtitle_text = _normalize_optional_text(subtitle)
     credits_text = _normalize_optional_text(credits)
 
@@ -65,25 +94,10 @@ def render_poster(
 
     title_max_width = round(content_width * 0.75)
     title_initial_size = max(10, round(width * 0.040))
-    title_minimum_size = max(9, round(width * 0.025))
-    try:
-        title_font = _fit_single_line(
-            title_text.upper(),
-            max_width=title_max_width,
-            initial_size=title_initial_size,
-            minimum_size=title_minimum_size,
-            weight=700,
-        )
-        title_lines = [title_text.upper()]
-    except ValueError:
-        title_font, title_lines = _fit_wrapped_text(
-            title_text.upper(),
-            max_width=title_max_width,
-            max_lines=2,
-            initial_size=title_initial_size,
-            minimum_size=title_minimum_size,
-            weight=700,
-        )
+    title_font = _font(title_initial_size, weight=700)
+    title_lines = _wrap_text(title_text.upper(), title_font, title_max_width)
+    if title_lines is None or len(title_lines) > 2:
+        raise ValueError("title is too long to fit in its allocated area")
     title_line_height = _line_height(title_font)
     title_top = round(height * 0.055)
     for index, line in enumerate(title_lines):
@@ -110,53 +124,66 @@ def render_poster(
         font=year_font,
         anchor="rt",
     )
-
     metadata_fields = (
         ("DIRECTED BY", director_text),
         ("WRITTEN BY", writer_text),
         ("STARRING", starring_text),
-        ("MUSIC BY", music_text),
+        ("RUNTIME", runtime_label),
     )
-    column_width = content_width / len(metadata_fields)
-    metadata_top = round(height * 0.135)
-    label_font = _font(max(9, round(width * 0.010)), weight=700)
-    value_font = _font(max(9, round(width * 0.010)), weight=400)
-    for index, (label, value) in enumerate(metadata_fields):
-        column_x = round(content_left + index * column_width)
+    if rating_text is not None:
+        metadata_fields += (("RATED", rating_text),)
+    if imdb_rating_text is not None:
+        metadata_fields += (("IMDB RATING", imdb_rating_text),)
+    metadata_top = max(
+        round(height * 0.135),
+        title_top + len(title_lines) * title_line_height + round(height * 0.015),
+    )
+    metadata_layout, metadata_bottom = _layout_metadata_fields(
+        metadata_fields,
+        content_left=content_left,
+        content_width=content_width,
+        gap=round(width * 0.02),
+        metadata_top=metadata_top,
+        width=width,
+        height=height,
+    )
+    for field in metadata_layout:
         draw.text(
-            (column_x, metadata_top),
-            label,
+            (field.x, metadata_top),
+            field.label,
             fill=INK,
-            font=label_font,
+            font=field.label_font,
             anchor="lt",
         )
-        body_font, lines = _fit_wrapped_text(
-            value,
-            max_width=round(column_width * 0.92),
-            max_lines=4,
-            initial_size=value_font.size,
-            minimum_size=max(8, round(width * 0.008)),
-            weight=400,
-        )
-        for line_index, line in enumerate(lines):
+        for line_index, line in enumerate(field.lines):
             draw.text(
                 (
-                    column_x,
-                    metadata_top
-                    + round(height * 0.018)
-                    + line_index * _line_height(body_font),
+                    field.x,
+                    field.value_top + line_index * _line_height(field.value_font),
                 ),
                 line,
                 fill=INK,
-                font=body_font,
+                font=field.value_font,
                 anchor="lt",
             )
 
+    footer = _layout_footer(
+        plot_text,
+        credits_text,
+        subtitle_text,
+        width=width,
+        height=height,
+        content_width=content_width,
+        barcode_top=max(
+            round(height * 0.225),
+            metadata_bottom + round(height * 0.02),
+        ),
+    )
     barcode_box = (
         content_left,
-        round(height * 0.225),
+        footer.barcode_top,
         content_right,
-        round(height * 0.895),
+        footer.barcode_bottom,
     )
     resized_barcode = barcode.convert("RGB").resize(
         (barcode_box[2] - barcode_box[0], barcode_box[3] - barcode_box[1]),
@@ -164,53 +191,33 @@ def render_poster(
     )
     poster.paste(resized_barcode, barcode_box[:2])
 
-    footer_y = round(height * 0.91)
-    if credits_text is not None:
-        credits_font = _fit_single_line(
-            credits_text,
-            max_width=round(content_width * 0.58),
-            initial_size=max(9, round(width * 0.013)),
-            minimum_size=max(8, round(width * 0.009)),
-            weight=400,
-        )
+    if footer.plot_font is not None:
+        for line_index, line in enumerate(footer.plot_lines):
+            draw.text(
+                (content_left, footer.top + line_index * _line_height(footer.plot_font)),
+                line,
+                fill=INK,
+                font=footer.plot_font,
+                anchor="lt",
+            )
+    if credits_text is not None and footer.credits_font is not None:
         draw.text(
-            (content_left, footer_y),
+            (content_left, footer.credits_top),
             credits_text.upper(),
             fill=INK,
-            font=credits_font,
+            font=footer.credits_font,
             anchor="lt",
         )
 
-    if subtitle_text is not None:
-        subtitle_font = _fit_single_line(
-            subtitle_text,
-            max_width=round(content_width * 0.58),
-            initial_size=max(9, round(width * 0.013)),
-            minimum_size=max(8, round(width * 0.009)),
-            weight=400,
-        )
+    if subtitle_text is not None and footer.subtitle_font is not None:
         draw.text(
-            (content_left, footer_y + round(height * 0.021)),
+            (content_left, footer.subtitle_top),
             subtitle_text,
             fill=INK,
-            font=subtitle_font,
+            font=footer.subtitle_font,
             anchor="lt",
         )
 
-    runtime_font = _fit_single_line(
-        runtime_label,
-        max_width=round(content_width * 0.28),
-        initial_size=max(9, round(width * 0.018)),
-        minimum_size=max(8, round(width * 0.012)),
-        weight=500,
-    )
-    draw.text(
-        (content_right, footer_y),
-        runtime_label,
-        fill=INK,
-        font=runtime_font,
-        anchor="rt",
-    )
     return poster
 
 
@@ -244,7 +251,10 @@ def render_svg(
     director: str | None = None,
     writer: str | None = None,
     starring: str | None = None,
-    music: str | None = None,
+    runtime: str | None = None,
+    rating: str | None = None,
+    imdb_rating: str | None = None,
+    plot: str | None = None,
     subtitle: str | None = None,
     credits: str | None = None,
     width: int = DEFAULT_WIDTH,
@@ -265,12 +275,14 @@ def render_svg(
     ):
         raise ValueError("year must be an integer between 1 and 9999")
 
-    runtime_label = _format_runtime(runtime_seconds)
+    runtime_label = _normalize_optional_text(runtime) or _format_runtime(runtime_seconds)
     title_text = _normalize_text(title).upper()
     director_text = _normalize_optional_text(director) or PLACEHOLDER
     writer_text = _normalize_optional_text(writer) or PLACEHOLDER
     starring_text = _normalize_optional_text(starring) or PLACEHOLDER
-    music_text = _normalize_optional_text(music) or PLACEHOLDER
+    rating_text = _normalize_optional_text(rating)
+    imdb_rating_text = _normalize_optional_text(imdb_rating)
+    plot_text = _normalize_optional_text(plot)
     subtitle_text = _normalize_optional_text(subtitle)
     credits_text = _normalize_optional_text(credits)
 
@@ -333,54 +345,67 @@ def render_svg(
             anchor="end",
         )
     )
-
     metadata_fields = (
         ("DIRECTED BY", director_text),
         ("WRITTEN BY", writer_text),
         ("STARRING", starring_text),
-        ("MUSIC BY", music_text),
+        ("RUNTIME", runtime_label),
     )
-    column_width = content_width / len(metadata_fields)
-    metadata_top = round(height * 0.135)
-    label_font = _font(max(9, round(width * 0.010)), weight=700)
-    value_font = _font(max(9, round(width * 0.010)), weight=400)
-    for index, (label, value) in enumerate(metadata_fields):
-        column_x = round(content_left + index * column_width)
+    if rating_text is not None:
+        metadata_fields += (("RATED", rating_text),)
+    if imdb_rating_text is not None:
+        metadata_fields += (("IMDB RATING", imdb_rating_text),)
+    metadata_top = max(
+        round(height * 0.135),
+        title_top + len(title_lines) * title_line_height + round(height * 0.015),
+    )
+    metadata_layout, metadata_bottom = _layout_metadata_fields(
+        metadata_fields,
+        content_left=content_left,
+        content_width=content_width,
+        gap=round(width * 0.02),
+        metadata_top=metadata_top,
+        width=width,
+        height=height,
+    )
+    for field in metadata_layout:
         elements.append(
             _svg_text(
-                label,
-                x=column_x,
+                field.label,
+                x=field.x,
                 top=metadata_top,
-                font=label_font,
+                font=field.label_font,
                 weight=700,
             )
         )
-        body_font, lines = _fit_wrapped_text(
-            value,
-            max_width=round(column_width * 0.92),
-            max_lines=4,
-            initial_size=value_font.size,
-            minimum_size=max(8, round(width * 0.008)),
-            weight=400,
-        )
-        for line_index, line in enumerate(lines):
+        for line_index, line in enumerate(field.lines):
             elements.append(
                 _svg_text(
                     line,
-                    x=column_x,
-                    top=metadata_top
-                    + round(height * 0.018)
-                    + line_index * _line_height(body_font),
-                    font=body_font,
+                    x=field.x,
+                    top=field.value_top + line_index * _line_height(field.value_font),
+                    font=field.value_font,
                     weight=400,
                 )
             )
 
+    footer = _layout_footer(
+        plot_text,
+        credits_text,
+        subtitle_text,
+        width=width,
+        height=height,
+        content_width=content_width,
+        barcode_top=max(
+            round(height * 0.225),
+            metadata_bottom + round(height * 0.02),
+        ),
+    )
     barcode_box = (
         content_left,
-        round(height * 0.225),
+        footer.barcode_top,
         content_right,
-        round(height * 0.895),
+        footer.barcode_bottom,
     )
     resized_barcode = barcode.convert("RGB").resize(
         (barcode_box[2] - barcode_box[0], barcode_box[3] - barcode_box[1]),
@@ -407,60 +432,38 @@ def render_svg(
         f'fill="{_svg_color(run_color)}"/>'
     )
 
-    footer_y = round(height * 0.91)
-    if credits_text is not None:
-        credits_font = _fit_single_line(
-            credits_text,
-            max_width=round(content_width * 0.58),
-            initial_size=max(9, round(width * 0.013)),
-            minimum_size=max(8, round(width * 0.009)),
-            weight=400,
-        )
+    if footer.plot_font is not None:
+        for line_index, line in enumerate(footer.plot_lines):
+            elements.append(
+                _svg_text(
+                    line,
+                    x=content_left,
+                    top=footer.top + line_index * _line_height(footer.plot_font),
+                    font=footer.plot_font,
+                    weight=400,
+                )
+            )
+    if credits_text is not None and footer.credits_font is not None:
         elements.append(
             _svg_text(
                 credits_text.upper(),
                 x=content_left,
-                top=footer_y,
-                font=credits_font,
+                top=footer.credits_top,
+                font=footer.credits_font,
                 weight=400,
             )
         )
 
-    if subtitle_text is not None:
-        subtitle_font = _fit_single_line(
-            subtitle_text,
-            max_width=round(content_width * 0.58),
-            initial_size=max(9, round(width * 0.013)),
-            minimum_size=max(8, round(width * 0.009)),
-            weight=400,
-        )
+    if subtitle_text is not None and footer.subtitle_font is not None:
         elements.append(
             _svg_text(
                 subtitle_text,
                 x=content_left,
-                top=footer_y + round(height * 0.021),
-                font=subtitle_font,
+                top=footer.subtitle_top,
+                font=footer.subtitle_font,
                 weight=400,
             )
         )
-
-    runtime_font = _fit_single_line(
-        runtime_label,
-        max_width=round(content_width * 0.28),
-        initial_size=max(9, round(width * 0.018)),
-        minimum_size=max(8, round(width * 0.012)),
-        weight=500,
-    )
-    elements.append(
-        _svg_text(
-            runtime_label,
-            x=content_right,
-            top=footer_y,
-            font=runtime_font,
-            weight=500,
-            anchor="end",
-        )
-    )
 
     font_data = base64.b64encode(_FONT_PATH.read_bytes()).decode("ascii")
     font_license = escape(_FONT_LICENSE_PATH.read_text(encoding="utf-8"))
@@ -584,6 +587,179 @@ def _font(size: int, *, weight: int) -> ImageFont.FreeTypeFont:
     font = ImageFont.truetype(str(_FONT_PATH), size=max(1, size))
     font.set_variation_by_axes([weight])
     return font
+
+
+def _metadata_column_layout(
+    fields: tuple[tuple[str, str], ...],
+    *,
+    content_left: int,
+    content_width: int,
+    gap: int,
+    label_font: ImageFont.FreeTypeFont,
+    value_font: ImageFont.FreeTypeFont,
+) -> list[tuple[int, int]]:
+    available_width = content_width - gap * (len(fields) - 1)
+    minimum_widths = [math.ceil(label_font.getlength(label)) for label, _ in fields]
+    preferred_widths = [
+        max(minimum, math.ceil(value_font.getlength(value)))
+        for minimum, (_, value) in zip(minimum_widths, fields)
+    ]
+    flexible_widths = [
+        preferred - minimum
+        for preferred, minimum in zip(preferred_widths, minimum_widths)
+    ]
+    flexible_total = sum(flexible_widths)
+    remaining_width = max(0, available_width - sum(minimum_widths))
+    scale = min(1.0, remaining_width / flexible_total) if flexible_total else 0.0
+    widths = [
+        minimum + math.floor(flexible * scale)
+        for minimum, flexible in zip(minimum_widths, flexible_widths)
+    ]
+    leftover = available_width - sum(widths)
+    if scale < 1 and leftover:
+        for index, flexible in sorted(
+            enumerate(flexible_widths),
+            key=lambda item: item[1] * scale - math.floor(item[1] * scale),
+            reverse=True,
+        )[:leftover]:
+            widths[index] += 1
+
+    columns = []
+    column_x = content_left
+    for column_width in widths:
+        columns.append((column_x, column_width))
+        column_x += column_width + gap
+    return columns
+
+
+def _layout_footer(
+    plot: str | None,
+    credits: str | None,
+    subtitle: str | None,
+    *,
+    width: int,
+    height: int,
+    content_width: int,
+    barcode_top: int,
+) -> _FooterLayout:
+    plot_lines: list[str] = []
+    plot_font: ImageFont.FreeTypeFont | None = None
+    if plot is not None:
+        plot_font, plot_lines = _fit_wrapped_text(
+            plot,
+            max_width=content_width,
+            max_lines=2,
+            initial_size=max(9, round(width * 0.012)),
+            minimum_size=max(8, round(width * 0.008)),
+            weight=400,
+        )
+
+    credits_font = (
+        _fit_single_line(
+            credits,
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
+            weight=400,
+        )
+        if credits is not None
+        else None
+    )
+    subtitle_font = (
+        _fit_single_line(
+            subtitle,
+            max_width=round(content_width * 0.58),
+            initial_size=max(9, round(width * 0.013)),
+            minimum_size=max(8, round(width * 0.009)),
+            weight=400,
+        )
+        if subtitle is not None
+        else None
+    )
+
+    top = round(height * 0.91)
+    gap = round(height * 0.006)
+    plot_height = len(plot_lines) * _line_height(plot_font) if plot_font else 0
+    credits_top = top + plot_height + (gap if plot_font else 0)
+    if credits_font is not None:
+        subtitle_top = credits_top + _line_height(credits_font) + gap
+    elif plot_font is not None:
+        subtitle_top = credits_top
+    else:
+        subtitle_top = top + round(height * 0.021)
+
+    footer_bottom = top
+    if plot_font is not None:
+        footer_bottom = max(footer_bottom, top + plot_height)
+    if credits_font is not None:
+        footer_bottom = max(footer_bottom, credits_top + _line_height(credits_font))
+    if subtitle_font is not None:
+        footer_bottom = max(footer_bottom, subtitle_top + _line_height(subtitle_font))
+    shift = max(0, footer_bottom - round(height * 0.98))
+    barcode_bottom = round(height * 0.895) - shift
+    if barcode_top >= barcode_bottom:
+        raise ValueError("title and metadata leave no room for the barcode")
+
+    return _FooterLayout(
+        top=top - shift,
+        barcode_top=barcode_top,
+        barcode_bottom=barcode_bottom,
+        plot_lines=plot_lines,
+        plot_font=plot_font,
+        credits_top=credits_top - shift,
+        credits_font=credits_font,
+        subtitle_top=subtitle_top - shift,
+        subtitle_font=subtitle_font,
+    )
+
+
+def _layout_metadata_fields(
+    fields: tuple[tuple[str, str], ...],
+    *,
+    content_left: int,
+    content_width: int,
+    gap: int,
+    metadata_top: int,
+    width: int,
+    height: int,
+) -> tuple[list[_MetadataFieldLayout], int]:
+    label_font = _font(max(9, round(width * 0.010)), weight=700)
+    value_font = _font(max(9, round(width * 0.010)), weight=400)
+    columns = _metadata_column_layout(
+        fields,
+        content_left=content_left,
+        content_width=content_width,
+        gap=gap,
+        label_font=label_font,
+        value_font=value_font,
+    )
+    layout = []
+    metadata_bottom = metadata_top + _line_height(label_font)
+    value_top = metadata_top + round(height * 0.018)
+    for (label, value), (column_x, column_width) in zip(fields, columns):
+        body_font, lines = _fit_wrapped_text(
+            value,
+            max_width=column_width,
+            max_lines=4,
+            initial_size=value_font.size,
+            minimum_size=max(8, round(width * 0.008)),
+            weight=400,
+        )
+        layout.append(
+            _MetadataFieldLayout(
+                label=label,
+                x=column_x,
+                label_font=label_font,
+                value_font=body_font,
+                value_top=value_top,
+                lines=lines,
+            )
+        )
+        metadata_bottom = max(
+            metadata_bottom,
+            value_top + len(lines) * _line_height(body_font),
+        )
+    return layout, metadata_bottom
 
 
 def _fit_single_line(

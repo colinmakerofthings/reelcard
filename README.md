@@ -74,7 +74,10 @@ Run `reelcard --help` for all options:
 | `--director TEXT` | Optional director credit. |
 | `--writer TEXT` | Optional writer credit. |
 | `--starring TEXT` | Optional lead cast. |
-| `--music TEXT` | Optional music credit. |
+| `--runtime TEXT` | Runtime label (e.g. `122 min`); overrides IMDb and video runtime. |
+| `--rating TEXT` | MPAA rating shown with the other metadata. |
+| `--imdb-rating TEXT` | IMDb score shown without its vote count. |
+| `--plot TEXT` | Plot summary shown in the footer. |
 | `--subtitle TEXT` | Optional subtitle below the barcode. |
 | `--credits TEXT` | Optional footer credits. |
 | `--imdb-id ID` | Look up missing metadata for this movie via OMDb; requires an API key. |
@@ -106,10 +109,12 @@ metadata for a specific movie, obtain an OMDb API key, set it in the
 `--imdb-id`.
 
 Lookup fills the title, year, director, writer, and starring fields only when
-they were not supplied manually. OMDb does not provide every poster field, so
-music, subtitle, and credits remain manual. Missing credentials, network
-problems, and lookup failures produce a warning and Reelcard continues with
-manual values and defaults.
+they were not supplied manually. Runtime uses the manually supplied value
+first, then OMDb's runtime, then the duration read from the video. The MPAA
+rating, IMDb score, and plot also come from OMDb unless supplied manually.
+Subtitle and credits remain manual. Missing credentials, network problems,
+and lookup failures produce a warning and Reelcard continues with manual
+values and defaults.
 
 ## Output
 

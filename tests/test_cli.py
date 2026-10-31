@@ -28,7 +28,10 @@ def test_cli_help_lists_supported_options(capsys: pytest.CaptureFixture[str]) ->
         "--director",
         "--writer",
         "--starring",
-        "--music",
+        "--runtime",
+        "--rating",
+        "--imdb-rating",
+        "--plot",
         "--subtitle",
         "--credits",
         "--imdb-id",
@@ -158,8 +161,14 @@ def test_cli_runs_pipeline_with_metadata_and_custom_options(
                 "Writer",
                 "--starring",
                 "Lead Cast",
-                "--music",
-                "Composer",
+                "--runtime",
+                "  122   min ",
+                "--rating",
+                "R",
+                "--imdb-rating",
+                "8.0/10",
+                "--plot",
+                "A plot summary",
                 "--subtitle",
                 "Subtitle",
                 "--credits",
@@ -195,7 +204,10 @@ def test_cli_runs_pipeline_with_metadata_and_custom_options(
         director="Director",
         writer="Writer",
         starring="Lead Cast",
-        music="Composer",
+        runtime="122 min",
+        rating="R",
+        imdb_rating="8.0/10",
+        plot="A plot summary",
         subtitle="Subtitle",
         credits="Credits",
         width=874,
@@ -278,6 +290,10 @@ def test_cli_lookup_fills_only_missing_manual_metadata(
                 director="Lookup Director",
                 writer="Lookup Writer",
                 starring="Lookup Actor",
+                runtime="122 min",
+                rating="R",
+                imdb_rating="8.0/10",
+                plot="A lookup plot",
             ),
         ) as find,
         patch("reelcard.cli.probe_video", return_value=metadata),
@@ -297,6 +313,10 @@ def test_cli_lookup_fills_only_missing_manual_metadata(
                 "1999",
                 "--director",
                 "Manual Director",
+                "--runtime",
+                "125 min",
+                "--imdb-rating",
+                "7.9/10",
             ]
         ) == 0
 
@@ -308,6 +328,48 @@ def test_cli_lookup_fills_only_missing_manual_metadata(
     assert render.call_args.kwargs["director"] == "Manual Director"
     assert render.call_args.kwargs["writer"] == "Lookup Writer"
     assert render.call_args.kwargs["starring"] == "Lookup Actor"
+    assert render.call_args.kwargs["runtime"] == "125 min"
+    assert render.call_args.kwargs["rating"] == "R"
+    assert render.call_args.kwargs["imdb_rating"] == "7.9/10"
+    assert render.call_args.kwargs["plot"] == "A lookup plot"
+
+
+def test_cli_uses_omdb_runtime_when_manual_runtime_is_not_given(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    input_path = tmp_path / "film.mp4"
+    input_path.touch()
+    monkeypatch.setenv("OMDB_API_KEY", "test-key")
+    metadata = VideoMetadata(60.0, 640, 480, 0)
+    with (
+        patch(
+            "reelcard.cli.lookup_movie",
+            return_value=MovieMetadata(runtime="122 min"),
+        ),
+        patch("reelcard.cli.probe_video", return_value=metadata),
+        patch("reelcard.cli.iter_video_frames", return_value=iter(())),
+        patch("reelcard.cli.make_barcode", return_value=Image.new("RGB", (1, 64))),
+        patch("reelcard.cli.render_poster") as render,
+        patch("reelcard.cli.save_poster"),
+    ):
+        assert main([str(input_path), "--imdb-id", "tt0000001"]) == 0
+
+    assert render.call_args.kwargs["runtime"] == "122 min"
+
+
+def test_cli_rejects_empty_manual_runtime(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    input_path = tmp_path / "film.mp4"
+    input_path.touch()
+
+    with pytest.raises(SystemExit) as exit_info:
+        main([str(input_path), "--runtime", "   "])
+
+    assert exit_info.value.code == 2
+    assert "runtime must not be empty" in capsys.readouterr().err
 
 
 def test_cli_lookup_failure_warns_and_generates_poster(
