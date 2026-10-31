@@ -285,10 +285,10 @@ def test_render_svg_does_not_include_music_credit_section() -> None:
         for element in text_elements
         if int(element.attrib["y"]) >= barcode_bottom
     ]
-    assert len(plot_elements) == 2
-    assert all(
-        int(element.attrib["y"]) >= barcode_bottom
-        for element in plot_elements
+    assert " ".join(element.text or "" for element in plot_elements) == (
+        "Violence and mayhem ensue after a hunter stumbles upon the aftermath "
+        "of a drug deal gone wrong and over two million dollars in cash near "
+        "the Rio Grande."
     )
 
 
